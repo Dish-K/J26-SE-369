@@ -1,0 +1,11 @@
+[project]
+name = "codetrace"
+version = "0.0.0"
+description = "Connected development foundation for J26-SE-369 CodeTrace"
+requires-python = ">=3.11,<3.14"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
