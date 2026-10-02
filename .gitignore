@@ -74,3 +74,6 @@ ml/data/generated/
 *.log
 tmp/
 .temp/
+
+*.md
+!README.md
