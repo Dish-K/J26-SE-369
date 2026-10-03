@@ -1,6 +1,6 @@
 # CodeTrace
 
-CodeTrace is the J26-SE-369 research project for real-time behavior analysis of AI-assisted coding during live technical interviews. This repository currently provides the connected development foundation shared by the project team: a FastAPI backend, local PostgreSQL with TimescaleDB, a reusable asynchronous database pool, automated tests, and CI across the supported Python versions.
+CodeTrace is the J26-SE-369 research project for real-time behavior analysis of AI-assisted coding during live technical interviews. This repository currently provides the connected development foundation shared by the project team: a FastAPI backend, a Next.js frontend, local PostgreSQL with TimescaleDB, a reusable asynchronous database pool, automated tests, and CI across the supported Python versions.
 
 ## Component responsibility areas
 
@@ -18,6 +18,7 @@ Install:
 - Git
 - Docker with Docker Compose
 - Python 3.11, 3.12, or 3.13
+- Node.js 20.9 or newer and npm
 
 Python 3.14 is not currently supported by this project.
 
@@ -164,13 +165,33 @@ To stop the local database without deleting its data:
 docker compose stop db
 ```
 
+## Frontend
+
+The shared Next.js app lives in `frontend/`, with root route been the public landing page.
+
+From `frontend/`, run:
+
+```bash
+npm ci
+npm run dev
+```
+
+Open http://localhost:3000. The frontend runs independently of the FastAPI and database services for now.
+
+To verify it locally:
+
+```bash
+npm run lint
+npm run build
+```
+
 ## Repository responsibilities
 
 ```text
 .github/       GitHub Actions and repository automation
 backend/       Live FastAPI backend application
 contracts/     Future approved cross-component executable contracts
-frontend/      Future candidate and interviewer frontend
+frontend/      Next.js landing page and foundation for candidate and interviewer views
 ml/            Future offline data preparation, training, and evaluation work
 tests/         Automated tests for implemented repository behavior
 docs/          Engineering documentation and decision records
@@ -198,7 +219,7 @@ Repository initialization does not provide:
 - Executable shared contracts.
 - Telemetry, classifier, probing, or explainability implementation.
 - Data generators, training workflows, or model artifacts.
-- A selected or scaffolded frontend framework.
+- Frontend authentication and candidate or interviewer workflows.
 - Deployment or cloud infrastructure.
 
 These items require later component context and explicit team decisions.

@@ -45,6 +45,8 @@ Desktop.ini
 # Node dependencies and generated frontend outputs
 node_modules/
 .next/
+next-env.d.ts
+*.tsbuildinfo
 .nuxt/
 .svelte-kit/
 out/
