@@ -1,0 +1,69 @@
+# PROVISIONAL TEST FIXTURE — NOT THE SHARED FEATURE REGISTRY.
+#
+# C1 specification §16 assigns the real registry to one shared file owned by
+# C1 (actionable values supplied by C2). That file has not been committed yet.
+# This copy exists only so C4 Phase 1 tests can exercise registry resolution.
+# Feature names and definitions are taken from C1-input-specification.md §8,
+# §9.6 and §10; units/ranges/labels are illustrative where the specification
+# does not state them. Replace with the shared registry when it lands.
+schema_version: contract-a-provisional-v0
+features:
+  keystroke_count:
+    dtype: int
+    unit: count
+    valid_range: [0, 100000]
+    label: "Keystrokes in window"
+  mean_dwell_ms:
+    dtype: float
+    unit: ms
+    label: "Average key hold time"
+  std_dwell_ms:
+    dtype: float
+    unit: ms
+    label: "Variation in key hold time"
+  mean_flight_ms:
+    dtype: float
+    unit: ms
+    label: "Average time between key presses"
+  std_flight_ms:
+    dtype: float
+    unit: ms
+    label: "Variation in time between key presses"
+  backspace_rate:
+    dtype: float
+    unit: fraction
+    valid_range: [0.0, 1.0]
+    label: "Correction rate while typing"
+    description: "How often the candidate deleted and retyped"
+    display_as: percent
+    actionable: true
+  paste_ratio:
+    dtype: float
+    unit: fraction
+    valid_range: [0.0, 1.0]
+    label: "Paste activity"
+    display_as: percent
+  inserted_len_max:
+    dtype: int
+    unit: characters
+    label: "Largest single insertion"
+  pause_ms:
+    dtype: float
+    unit: ms
+    label: "Longest pause"
+  focus_switch_count:
+    dtype: int
+    unit: count
+    label: "Focus switches"
+  edit_count:
+    dtype: int
+    unit: count
+    label: "Edits in window"
+  min_line:
+    dtype: int
+    unit: line
+    label: "Lowest line touched"
+  max_line:
+    dtype: int
+    unit: line
+    label: "Highest line touched"

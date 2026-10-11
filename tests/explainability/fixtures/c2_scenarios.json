@@ -1,0 +1,230 @@
+{
+  "_comment": "PROTOTYPE C2-COMPATIBLE FIXTURE. Feature values are hand-authored for C4 Phase 1 integration tests only. Probabilities, ai_positive and representatives are produced at test time by tests/explainability/fixtures/prototype_c2.py emulating C2's persistence rules. Not research data.",
+  "model_version": "synthetic-prototype-v0",
+  "schema_version": "contract-a-provisional-v0",
+  "tasks": [
+    {
+      "name": "external_ai_task",
+      "session_id": "28b2a919-3571-4031-a583-543ccd8d52cf",
+      "task_id": "182c28df-f9f6-405c-a37c-f686a618858e",
+      "windows": [
+        {
+          "feature_vector_id": "36bc2a0e-d768-4d3b-a16e-ef05c0ab7684",
+          "prediction_id": "9eabcc4e-76ee-482c-b7bd-3f9f160b6515",
+          "window_start": "2026-10-09T10:00:10+00:00",
+          "window_end": "2026-10-09T10:00:40+00:00",
+          "features": {
+            "std_flight_ms": 150.0,
+            "std_dwell_ms": 30.0,
+            "pause_ms": 16000.0,
+            "paste_ratio": 0.55,
+            "min_line": 20,
+            "mean_flight_ms": 300.0,
+            "mean_dwell_ms": 104.0,
+            "max_line": 42,
+            "keystroke_count": 28,
+            "inserted_len_max": 310,
+            "focus_switch_count": 3,
+            "edit_count": 9,
+            "backspace_rate": 0.02
+          }
+        },
+        {
+          "feature_vector_id": "f7e1cc02-4df6-493e-a21a-af9d9b886b83",
+          "prediction_id": "61b18792-c5be-4d0f-8b52-d3ab500d5069",
+          "window_start": "2026-10-09T10:00:20+00:00",
+          "window_end": "2026-10-09T10:00:50+00:00",
+          "features": {
+            "std_flight_ms": 150.0,
+            "std_dwell_ms": 30.0,
+            "pause_ms": 17500.0,
+            "paste_ratio": 0.55,
+            "min_line": 20,
+            "mean_flight_ms": 300.0,
+            "mean_dwell_ms": 104.0,
+            "max_line": 42,
+            "keystroke_count": 28,
+            "inserted_len_max": 310,
+            "focus_switch_count": 3,
+            "edit_count": 9,
+            "backspace_rate": 0.02
+          }
+        },
+        {
+          "feature_vector_id": "0b96405d-c34f-4055-82a1-c7723db1bb93",
+          "prediction_id": "7280511c-073f-479a-9e80-9a9384098f06",
+          "window_start": "2026-10-09T10:00:30+00:00",
+          "window_end": "2026-10-09T10:01:00+00:00",
+          "features": {
+            "std_flight_ms": 150.0,
+            "std_dwell_ms": 30.0,
+            "pause_ms": 17500.0,
+            "paste_ratio": 0.45,
+            "min_line": 20,
+            "mean_flight_ms": 300.0,
+            "mean_dwell_ms": 104.0,
+            "max_line": 42,
+            "keystroke_count": 28,
+            "inserted_len_max": 260,
+            "focus_switch_count": 3,
+            "edit_count": 9,
+            "backspace_rate": 0.02
+          }
+        },
+        {
+          "feature_vector_id": "a5f37317-5cf4-4358-b740-3a080bc7a1d9",
+          "prediction_id": "c7fe9692-1cbd-4805-98e4-1bdce8157179",
+          "window_start": "2026-10-09T10:00:40+00:00",
+          "window_end": "2026-10-09T10:01:10+00:00",
+          "features": {
+            "std_flight_ms": 138.0,
+            "std_dwell_ms": 34.0,
+            "pause_ms": 3800.0,
+            "paste_ratio": 0.0,
+            "min_line": 4,
+            "mean_flight_ms": 255.0,
+            "mean_dwell_ms": 108.0,
+            "max_line": 9,
+            "keystroke_count": 92,
+            "inserted_len_max": 3,
+            "focus_switch_count": 0,
+            "edit_count": 85,
+            "backspace_rate": 0.12
+          }
+        }
+      ],
+      "flags": [
+        {
+          "name": "external_ai_segment",
+          "flag_id": "fd02726e-35a5-421d-8d23-dd0811f7f85e",
+          "member_prediction_ids": [
+            "9eabcc4e-76ee-482c-b7bd-3f9f160b6515",
+            "61b18792-c5be-4d0f-8b52-d3ab500d5069",
+            "7280511c-073f-479a-9e80-9a9384098f06"
+          ],
+          "detected_start_line": 20,
+          "detected_end_line": 42,
+          "evidence_kinds": [
+            "paste",
+            "no_typing_errors"
+          ],
+          "segment_basis": "mixed"
+        }
+      ]
+    },
+    {
+      "name": "ide_ai_task",
+      "session_id": "27c4e56a-36e4-4463-a3a4-c4249ac60178",
+      "task_id": "a27af542-f02a-4893-a0e5-ea27e9a4a8fd",
+      "windows": [
+        {
+          "feature_vector_id": "5e56d6c1-bf78-4ef0-84e8-0b1ae6e895bc",
+          "prediction_id": "7975d2a6-44d0-49fb-8f1d-a5aa40c66ff1",
+          "window_start": "2026-10-09T10:00:10+00:00",
+          "window_end": "2026-10-09T10:00:40+00:00",
+          "features": {
+            "std_flight_ms": 138.0,
+            "std_dwell_ms": 34.0,
+            "pause_ms": 3800.0,
+            "paste_ratio": 0.0,
+            "min_line": 4,
+            "mean_flight_ms": 255.0,
+            "mean_dwell_ms": 108.0,
+            "max_line": 9,
+            "keystroke_count": 92,
+            "inserted_len_max": 3,
+            "focus_switch_count": 0,
+            "edit_count": 85,
+            "backspace_rate": 0.12
+          }
+        },
+        {
+          "feature_vector_id": "02a3cc9b-0338-484b-90ef-7ceb6d0e15b4",
+          "prediction_id": "28e59b98-f019-48bf-9064-5d80c43dc05c",
+          "window_start": "2026-10-09T10:00:20+00:00",
+          "window_end": "2026-10-09T10:00:50+00:00",
+          "features": {
+            "std_flight_ms": 95.0,
+            "std_dwell_ms": 28.0,
+            "pause_ms": 2600.0,
+            "paste_ratio": 0.04,
+            "min_line": 11,
+            "mean_flight_ms": 210.0,
+            "mean_dwell_ms": 102.0,
+            "max_line": 16,
+            "keystroke_count": 48,
+            "inserted_len_max": 42,
+            "focus_switch_count": 0,
+            "edit_count": 30,
+            "backspace_rate": 0.03
+          }
+        }
+      ],
+      "flags": [
+        {
+          "name": "ide_ai_segment",
+          "flag_id": "13c24cd6-714b-4830-b92a-24920c9bea02",
+          "member_prediction_ids": [
+            "28e59b98-f019-48bf-9064-5d80c43dc05c"
+          ],
+          "detected_start_line": 11,
+          "detected_end_line": 16,
+          "evidence_kinds": [
+            "suggestion_accepted"
+          ],
+          "segment_basis": "event"
+        }
+      ]
+    },
+    {
+      "name": "clean_task",
+      "session_id": "601c42ea-fe9f-4372-8364-a6168f672b11",
+      "task_id": "7f7ff872-ddd2-4160-92f6-8c731eec60f7",
+      "windows": [
+        {
+          "feature_vector_id": "0a1925cb-83ab-4bd4-b554-209e70fcf4e9",
+          "prediction_id": "f64fe7a2-6245-4139-91bd-496eb0e35aed",
+          "window_start": "2026-10-09T10:00:10+00:00",
+          "window_end": "2026-10-09T10:00:40+00:00",
+          "features": {
+            "std_flight_ms": 138.0,
+            "std_dwell_ms": 34.0,
+            "pause_ms": 3800.0,
+            "paste_ratio": 0.0,
+            "min_line": 4,
+            "mean_flight_ms": 255.0,
+            "mean_dwell_ms": 108.0,
+            "max_line": 9,
+            "keystroke_count": 92,
+            "inserted_len_max": 3,
+            "focus_switch_count": 0,
+            "edit_count": 85,
+            "backspace_rate": 0.12
+          }
+        },
+        {
+          "feature_vector_id": "8b0137b5-d7b9-4731-a216-8e4bb3e8f4e1",
+          "prediction_id": "17253a3d-6ba8-4708-ad04-ffddfe570241",
+          "window_start": "2026-10-09T10:00:20+00:00",
+          "window_end": "2026-10-09T10:00:50+00:00",
+          "features": {
+            "std_flight_ms": 138.0,
+            "std_dwell_ms": 34.0,
+            "pause_ms": 3800.0,
+            "paste_ratio": 0.0,
+            "min_line": 4,
+            "mean_flight_ms": 255.0,
+            "mean_dwell_ms": 108.0,
+            "max_line": 9,
+            "keystroke_count": 101,
+            "inserted_len_max": 3,
+            "focus_switch_count": 0,
+            "edit_count": 85,
+            "backspace_rate": 0.12
+          }
+        }
+      ],
+      "flags": []
+    }
+  ]
+}
