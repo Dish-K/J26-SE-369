@@ -1,39 +1,5 @@
--- 005_classifier_output.sql
--- Durable Behavioral Classifier (C2) output and prediction audit trail.
--- Consumed downstream by Adaptive Probing (C3) and Explainability (C4).
---
--- Runtime decisions frozen for database-contract-v1:
---   * C1 emits 30 s feature windows every 10 s in normal live operation.
---   * C2 predicts one of no_ai / ide_ai / external_ai for each completed
---     feature-vector row and stores the full three-class probability vector.
---   * An AI category becomes AI-positive only when its predicted-category
---     probability meets the model-version threshold. The threshold itself
---     lives in the versioned model artifact, not in this database.
---   * Evidence such as paste, accepted suggestions, typing bursts, uniform
---     timing and low correction activity is descriptive evidence only. It must
---     never be used as a deterministic class rule.
---   * AI-positive observations are localized to one or more code regions.
---     Disconnected edit ranges inside one window stay separate.
---   * A flagged segment is a maximal connected run of AI-positive observations
---     that share task, model version and AI category, are consecutive in the
---     10 s window stream, and whose localized ranges overlap or directly touch.
---   * A no_ai/below-threshold window, category change, task change,
---     model-version change, non-consecutive window, or separated code range
---     breaks the segment.
---   * A segment formed from several windows inherits confidence and the full
---     probability vector from the highest-confidence member window for the
---     segment's category. Probabilities are not averaged across windows.
---   * classifier_flags stores immutable HISTORICAL detection coordinates.
---     Final submitted-code coordinates are resolved separately in migration 006.
---   * At submission, answer-level AI confidence is the maximum confidence among
---     that task/model's AI-associated flags. If there are no flags, the verdict
---     is no_ai_detected and ai_confidence is NULL.
+-- C2 output. The frozen segment and scoring rules are listed in README.md.
 
--- ---------------------------------------------------------------------------
--- classifier_window_predictions
--- One durable prediction for one feature vector under one model version.
--- This table is the audit bridge between Contract-A input and final segments.
--- ---------------------------------------------------------------------------
 CREATE TABLE classifier_window_predictions (
   prediction_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
@@ -46,12 +12,9 @@ CREATE TABLE classifier_window_predictions (
 
   class_probabilities JSONB NOT NULL,
 
-  -- Always equals the probability of predicted_category.
   confidence DOUBLE PRECISION NOT NULL,
 
-  -- TRUE only when the winning class is ide_ai/external_ai AND its confidence
-  -- meets the threshold stored in the referenced model artifact. An AI class
-  -- may therefore have ai_positive=FALSE when it is below threshold.
+  -- An AI class below the threshold in the model artifact stays FALSE.
   ai_positive BOOLEAN NOT NULL,
 
   predicted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -100,13 +63,10 @@ CREATE TABLE classifier_window_predictions (
   CONSTRAINT classifier_window_predictions_positive_class_chk
     CHECK (NOT ai_positive OR predicted_category IN ('ide_ai', 'external_ai')),
 
-  -- The same feature input may be re-scored by a later model version, but not
-  -- twice by the same model version.
   CONSTRAINT classifier_window_predictions_feature_model_uk
     UNIQUE (feature_vector_id, model_version),
 
-  -- Composite identity used by classifier_flags so the representative
-  -- prediction is guaranteed to match the flag's task/model/category.
+  -- Composite FK target, so a flag's representative matches its task, model and category.
   CONSTRAINT classifier_window_predictions_rep_identity_uk
     UNIQUE (prediction_id, task_id, model_version, predicted_category)
 );
@@ -114,40 +74,7 @@ CREATE TABLE classifier_window_predictions (
 CREATE INDEX classifier_window_predictions_task_idx
   ON classifier_window_predictions (task_id, model_version, predicted_at);
 
--- ---------------------------------------------------------------------------
--- SEGMENT FORMATION / LOCALIZATION CONTRACT
---
--- Localization happens only AFTER the trained model has produced an AI-positive
--- prediction. An edit event never creates an AI class by itself.
---
--- For each AI-positive window, C2 uses the underlying edit-event ranges where
--- available. Ranges inside one window are combined only when they overlap or
--- directly touch. Disconnected regions are independent inputs to the segment
--- builder. min_line/max_line style window summaries are fallback localization,
--- not permission to invent a single span across scattered edits.
---
--- Two localized observations connect into one segment only when ALL hold:
---   1. same task_id
---   2. same model_version
---   3. same AI category
---   4. consecutive in the 10-second window stream
---   5. ranges overlap or directly touch (zero-line gap)
---
--- Range connectivity for inclusive line ranges A and B:
---   A.start <= B.end + 1 AND B.start <= A.end + 1
---
--- A no_ai/below-threshold window breaks temporal continuity. A later AI-positive
--- observation is a new episode even when it modifies the same lines.
--- Evidence kind is NOT part of segment identity.
--- ---------------------------------------------------------------------------
-
--- ---------------------------------------------------------------------------
--- classifier_flags
--- One row per independently identified suspicious code segment.
--- Coordinates here are immutable historical coordinates from the detection
--- episode, not final-submission coordinates. Migration 006 resolves each flag
--- against task_submissions for C3.
--- ---------------------------------------------------------------------------
+-- Line ranges are historical, from detection time; 006 maps them to the final file.
 CREATE TABLE classifier_flags (
   flag_id       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   task_id       UUID NOT NULL REFERENCES tasks(task_id),
@@ -156,38 +83,26 @@ CREATE TABLE classifier_flags (
   category TEXT NOT NULL
     CHECK (category IN ('external_ai', 'ide_ai')),
 
-  -- Highest-confidence member window for this segment. The composite FK below
-  -- guarantees same task, model version and category.
+  -- The highest-confidence member window.
   representative_prediction_id UUID NOT NULL,
 
-  -- Copied from the representative prediction. The validation trigger below
-  -- prevents these values from drifting from that source prediction.
+  -- Copied from the representative, never averaged; the trigger below enforces it.
   class_probabilities JSONB NOT NULL,
   confidence          DOUBLE PRECISION NOT NULL,
 
-  -- Historical line range at detection/finalization time. Do not silently
-  -- rebase these values as the candidate later edits the document.
+  -- Never rebased as the candidate keeps editing.
   detected_start_line INTEGER NOT NULL,
   detected_end_line   INTEGER NOT NULL,
 
-  -- Descriptive evidence associated with the learned prediction. This field is
-  -- never a deterministic classifier rule. Treat as a set; order is irrelevant.
+  -- Descriptive evidence only, never a classification rule.
   evidence_kinds TEXT[] NOT NULL,
 
-  -- How the historical range was localized:
-  --   event      -> exact edit-event range provided the localization anchor;
-  --   window_run -> built from one/more AI-positive windows using exact edit
-  --                 ranges where available, with a window summary only as a
-  --                 documented fallback;
-  --   mixed      -> both event-anchored and window-derived evidence contributed.
+  -- event: anchored on an exact edit range; window_run: built from windows; mixed: both.
   segment_basis TEXT NOT NULL
     CHECK (segment_basis IN ('event', 'window_run', 'mixed')),
 
-  -- Number of AI-positive window predictions treated as contributors to this
-  -- segment. For an event-basis segment this remains 1 by contract.
   window_count SMALLINT NOT NULL DEFAULT 1,
 
-  -- Time span of the historical detection episode.
   detected_at    TIMESTAMPTZ NOT NULL,
   detected_until TIMESTAMPTZ NOT NULL,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -261,12 +176,11 @@ CREATE TABLE classifier_flags (
       predicted_category
     ),
 
-  -- Supports migration 006's composite FK and prevents task mismatches there.
+  -- Composite FK target for 006.
   CONSTRAINT classifier_flags_id_task_uk
     UNIQUE (flag_id, task_id),
 
-  -- Duplicate protection includes detection time so two genuinely separate
-  -- episodes may affect exactly the same lines later in the same task.
+  -- Includes detection time: separate episodes may later hit the same lines.
   CONSTRAINT classifier_flags_episode_uk
     UNIQUE (
       task_id,
@@ -282,8 +196,7 @@ CREATE TABLE classifier_flags (
 CREATE INDEX classifier_flags_task_idx
   ON classifier_flags (task_id, model_version, detected_at);
 
--- Validate that the representative prediction is AI-positive and that the
--- copied probability vector/confidence exactly come from that prediction.
+-- The representative must be AI-positive and the flag must copy its numbers exactly.
 CREATE OR REPLACE FUNCTION classifier_validate_flag_representative()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -335,12 +248,7 @@ ON classifier_flags
 FOR EACH ROW
 EXECUTE FUNCTION classifier_validate_flag_representative();
 
--- ---------------------------------------------------------------------------
--- classifier_flag_predictions
--- Provenance membership: which AI-positive window predictions contributed to
--- each final historical segment. One prediction may contribute to multiple
--- segments when one positive window localizes to disconnected code regions.
--- ---------------------------------------------------------------------------
+-- One prediction can feed several flags when its window has disconnected edit regions.
 CREATE TABLE classifier_flag_predictions (
   flag_id       UUID NOT NULL REFERENCES classifier_flags(flag_id) ON DELETE CASCADE,
   prediction_id UUID NOT NULL REFERENCES classifier_window_predictions(prediction_id),
@@ -383,12 +291,7 @@ ON classifier_flag_predictions
 FOR EACH ROW
 EXECUTE FUNCTION classifier_validate_flag_prediction_member();
 
--- ---------------------------------------------------------------------------
--- classifier_task_scores
--- One result per task/model version, produced at submission.
--- ai_confidence = MAX(confidence) across that task/model's classifier_flags.
--- A clean answer has no flags, verdict=no_ai_detected and ai_confidence=NULL.
--- ---------------------------------------------------------------------------
+-- ai_confidence is the max flag confidence; a clean task is no_ai_detected with NULL.
 CREATE TABLE classifier_task_scores (
   task_score_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   task_id       UUID NOT NULL REFERENCES tasks(task_id),
@@ -453,20 +356,9 @@ ON classifier_task_scores
 FOR EACH ROW
 EXECUTE FUNCTION classifier_validate_task_score();
 
--- A probe task is generated from one specific historical classifier flag.
---
--- ON DELETE SET NULL breaks a dependency loop: tasks.parent_flag_id points at
--- classifier_flags, and classifier_flags.task_id points back at tasks. Without
--- it, neither table can be deleted first and the stage-2 retention sweep
--- (spec §17.1) deadlocks -- the whole transaction rolls back and nothing is
--- deleted at all.
---
--- parent_flag_id is already nullable, since an original task has no parent
--- flag, so clearing it loses no information that survives the deletion anyway.
+-- SET NULL breaks the tasks <-> classifier_flags loop, which would otherwise block retention.
 ALTER TABLE tasks
   ADD CONSTRAINT tasks_parent_flag_fk
   FOREIGN KEY (parent_flag_id)
   REFERENCES classifier_flags(flag_id)
   ON DELETE SET NULL;
-
--- ZERO FLAGS IS A valid result when classifier_task_scores says no_ai_detected.
