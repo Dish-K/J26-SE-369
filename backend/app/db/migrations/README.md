@@ -43,7 +43,7 @@ a row before applying. The container restarts once while it initialises, and a
 migration run during that restart fails with "the database system is shutting
 down".
 
-After a clean run there are 14 tables and `events` is the only hypertable.
+After a clean run there are 13 tables and 1 view, and `events` is the only hypertable.
 
 ## C2 rules the schema relies on
 
