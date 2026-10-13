@@ -1,7 +1,5 @@
--- verify_contract.sql
--- Smoke-test the frozen database contract. Run AFTER migrations 001-006 on a
--- disposable/local database. Everything is wrapped in a transaction and rolled
--- back so no verification rows remain.
+-- Smoke test of the capture and C2 output contract. Passes if psql reports no
+-- ERROR; everything rolls back.
 
 BEGIN;
 
@@ -80,7 +78,7 @@ BEGIN
   INSERT INTO classifier_flag_predictions (flag_id, prediction_id)
   VALUES (f1, p1), (f1, p2);
 
-  -- Same category/range later is valid because detection time is different.
+  -- The same lines again later is a separate episode, since detection time differs.
   INSERT INTO classifier_flags (
     task_id, model_version, category, representative_prediction_id,
     class_probabilities, confidence,
@@ -99,7 +97,7 @@ BEGIN
   INSERT INTO classifier_flag_predictions (flag_id, prediction_id)
   VALUES (f2, p1);
 
-  -- Exact duplicate episode must be rejected.
+  -- An exact duplicate episode must be rejected.
   BEGIN
     INSERT INTO classifier_flags (
       task_id, model_version, category, representative_prediction_id,
@@ -167,5 +165,3 @@ END;
 $$;
 
 ROLLBACK;
-
--- If psql reaches this point without an ERROR, the contract smoke test passed.

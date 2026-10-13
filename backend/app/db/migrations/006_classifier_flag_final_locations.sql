@@ -1,19 +1,4 @@
--- 006_classifier_flag_final_locations.sql
--- Submission-time mapping for immutable historical C2 flags.
---
--- classifier_flags keeps the line range exactly as it existed for the live
--- detection episode. After the candidate submits, the application resolves
--- each historical flag against task_submissions and writes exactly one row here.
---
--- status semantics:
---   mapped     -> the same flagged code can be located in the submitted file;
---   deleted    -> the flagged code no longer exists in the submitted file;
---   unmappable -> the system cannot safely determine a final location.
---
--- C3 must use final_start_line/final_end_line only when status='mapped'. It must
--- never treat the immutable historical coordinates as final submitted-code
--- coordinates.
-
+-- One row per flag, written at submission. Flag lines are historical; these are final.
 CREATE TABLE classifier_flag_final_locations (
   flag_id UUID PRIMARY KEY,
   task_id UUID NOT NULL,
@@ -31,7 +16,7 @@ CREATE TABLE classifier_flag_final_locations (
     REFERENCES classifier_flags(flag_id, task_id)
     ON DELETE CASCADE,
 
-  -- A final location may only be resolved after a final submission exists.
+  -- A final location needs a submitted file to map against.
   CONSTRAINT classifier_flag_final_locations_submission_fk
     FOREIGN KEY (task_id)
     REFERENCES task_submissions(task_id),
@@ -53,8 +38,7 @@ CREATE TABLE classifier_flag_final_locations (
 CREATE INDEX classifier_flag_final_locations_task_idx
   ON classifier_flag_final_locations (task_id, status);
 
--- Safe C3-facing view. Historical coordinates are exposed for audit, while the
--- final mapped coordinates are the only ranges to use for submitted-code fetch.
+-- C3 reads this view: mapped flags only, with their final lines as start_line/end_line.
 CREATE VIEW classifier_flags_for_probing AS
 SELECT
   f.flag_id,
