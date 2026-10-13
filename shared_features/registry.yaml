@@ -1,0 +1,568 @@
+# shared_features/registry.yaml
+
+# THE single source of truth for the C1 -> C2 feature contract.
+# This is data, not code. Adding a feature means editing this file.
+
+# Read by: the C1 extractor, the C1 capture client (enums), the synthetic
+# generator, C2's classifier and C4's dashboard labels. Nobody keeps a second
+# list -- that is the whole point (specification 16).
+
+# STATUS: 1.0.0 -- FROZEN 2026-10-09. C2 approved the three open items
+#  - (unknown_paste_count, window_task_coverage_ms, and the unpaired_keydown_rate
+#  - rename) in the final implementation handover, section A.1. The 40-feature
+#  - list, the column order and the nullable-value semantics are now a contract.
+
+#   Changing a name, a dtype, a unit or the order from here on is a NEW schema
+#   version, not an edit. C2 pins this string; a silent change desynchronises a
+#   trained model from the vectors it is fed and nothing raises.
+
+schema_version: "1.0.0"
+
+window:
+  width_s: 30
+  step_s:  10
+
+parameters:
+  # Flight intervals longer than this are excluded from flight statistics and
+  # break a burst. Strictly greater: exactly 2000.0 is KEPT. The gap is not
+  # discarded -- it still lands in pause_ms. Specification 8.1, C2 Decision 1.
+  pause_threshold_ms: 2000
+
+  # A copy or cut counts toward copy_before_blur when focus leaves the window
+  # within this long afterwards. Boundary is inclusive: <= 5000. C2 Decision 6.
+  # A chosen engineering parameter, NOT a validated AI-detection threshold.
+  copy_before_blur_ms: 5000
+
+  # Live emission only. A window [T, T+30s) is complete and scorable at
+  # T + 30s + this. 8x the 250ms client flush interval. Specification 15.
+  window_grace_ms: 2000
+
+  # Live emission only. Lead-in the caller must include before window_start so
+  # dwell and flight pairs straddling the boundary resolve. Specification 15.
+  live_lookback_ms: 5000
+
+
+
+# Event code maps.
+# authority: sql     -> a CHECK constraint in 002_tables.sql pins the range,
+#                       and tests/test_enum_parity.py asserts these match it.
+# authority: spec    -> the specification is authoritative; SQL constrains
+#                       nothing, so nothing can check it automatically.
+# authority: c1      -> C1 authored these values. The migration defines the
+#                       column but not its meaning, and no COMMENT ON exists
+#                       anywhere in the migration set.
+enums:
+  Kind:
+    authority: sql
+    column: events.kind
+    values: {keydown: 0, keyup: 1, edit: 2, blur: 3, focus: 4,
+             visibility_change: 5, fullscreen_change: 6, resize: 7,
+             run_started: 8, run_finished: 9, copy: 10, cut: 11,
+             page_hide: 12, network_state: 13, display_change: 14}
+
+  Origin:
+    authority: sql
+    column: events.origin
+    values: {typed: 0, pasted: 1, undo: 2, redo: 3, reset: 4,
+             autocomplete_accepted: 5}
+
+  ExitStatus:
+    authority: sql
+    column: events.exit_status
+    values: {ok: 0, error: 1, timeout: 2}
+
+  SourcePane:
+    authority: sql
+    column: events.source_pane
+    values: {editor: 0, problem_statement: 1, output: 2, other: 3}
+
+  Modifier:
+    authority: sql # CHECK (modifiers BETWEEN 0 AND 15); bitmask
+    column: events.modifiers
+    flags: {ctrl: 1, alt: 2, shift: 4, meta: 8}
+
+  KeyClass:
+    authority: spec # specification 4; SQL leaves this unconstrained
+    column: events.key_class
+    values: {letter: 0, digit: 1, symbol: 2, space: 3, enter: 4, tab: 5,
+             backspace: 6, delete: 7, navigation: 8, modifier_alone: 9,
+             function_key: 10, other: 11}
+
+  CaptureReason:
+    authority: sql # 008: CHECK (capture_reason BETWEEN 0 AND 2)
+    column: code_snapshots.capture_reason
+    # Why a full-document snapshot was stored. The 10s tick alone leaves gaps
+    # that matter: Monaco bumps version_id on every edit, so a candidate typing
+    # produces several versions a second. The two event triggers make an exact
+    # match the common case for the evidence that carries most weight -- pasted
+    # code -- and capture the document before a large deletion removes it.
+    # NULL is permitted in SQL and means "captured before 008", never "tick".
+    values: {tick: 0, after_paste: 1, before_large_delete: 2}
+
+  PasteOrigin:
+    authority: c1           # SQL leaves this unconstrained
+    column: events.paste_origin
+    values: {internal: 0, external: 1, unknown: 2}
+
+  # env_state is interpreted by the kind on the same row.
+  Visibility: {authority: c1, column: events.env_state, applies_to_kind: 5,
+               values: {visible: 0, hidden: 1}}
+  Fullscreen: {authority: c1, column: events.env_state, applies_to_kind: 6,
+               values: {exited: 0, entered: 1}}
+  Network:    {authority: c1, column: events.env_state, applies_to_kind: 13,
+               values: {offline: 0, online: 1}}
+  Display:    {authority: c1, column: events.env_state, applies_to_kind: 14,
+               values: {single: 0, extended: 1}}
+
+# The 40 features, in contract order.
+
+# valid_range: [min, max]; a null bound is unbounded.
+# nullable follows the missing-value policy in specification 16.1:
+#   a count is 0; a statistic over nothing is null.
+# actionable is C2's to fill in. null means "not yet decided", never "no".
+features:
+
+  # keystroke
+  keystroke_count:
+    family: keystroke
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Keystrokes"
+    description: "Keydown events in the window, auto-repeat included."
+    display_as: count
+    actionable: null
+
+  mean_dwell_ms:
+    family: keystroke
+    dtype: float
+    unit: ms
+    valid_range: [0.0, null]
+    nullable: true
+    label: "Average key hold time"
+    description: "Mean time a key was held down, over matched non-repeat keydown/keyup pairs. Null with no matched pair."
+    display_as: milliseconds
+    actionable: null
+
+  std_dwell_ms:
+    family: keystroke
+    dtype: float
+    unit: ms
+    valid_range: [0.0, null]
+    nullable: true
+    label: "Variation in key hold time"
+    description: "Population standard deviation of dwell. Null with fewer than two matched pairs."
+    display_as: milliseconds
+    actionable: null
+
+  mean_flight_ms:
+    family: keystroke
+    dtype: float
+    unit: ms
+    valid_range: [0.0, null]
+    nullable: true
+    label: "Average time between keys"
+    description: "Mean interval between consecutive non-repeat keydowns, excluding gaps over pause_threshold_ms. Null with no eligible interval."
+    display_as: milliseconds
+    actionable: null
+
+  std_flight_ms:
+    family: keystroke
+    dtype: float
+    unit: ms
+    valid_range: [0.0, null]
+    nullable: true
+    label: "Typing rhythm steadiness"
+    description: "Population standard deviation of flight. A very low value is the uniform-rhythm signal. Null with fewer than two intervals."
+    display_as: milliseconds
+    actionable: null
+
+  backspace_count:
+    family: keystroke
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Backspaces"
+    description: "Keydowns with key_class = backspace."
+    display_as: count
+    actionable: null
+
+  backspace_rate:
+    family: keystroke
+    dtype: float
+    unit: fraction
+    valid_range: [0.0, 1.0]
+    nullable: true
+    label: "Correction rate while typing"
+    description: "Backspaces divided by keystrokes. Null when nothing was typed -- a zero there would claim flawless typing that was never observed."
+    display_as: percent
+    actionable: null
+
+  is_repeat_rate:
+    family: keystroke
+    dtype: float
+    unit: fraction
+    valid_range: [0.0, 1.0]
+    nullable: true
+    label: "Held-key rate"
+    description: "Fraction of keydowns produced by auto-repeat rather than a fresh press. Null when nothing was typed."
+    display_as: percent
+    actionable: null
+
+  untrusted_key_rate:
+    family: keystroke
+    dtype: float
+    unit: fraction
+    valid_range: [0.0, 1.0]
+    nullable: true
+    label: "Synthetic keystroke rate"
+    description: "Fraction of keydowns with isTrusted false, meaning a script dispatched them rather than a person. Null when nothing was typed."
+    display_as: percent
+    actionable: null
+
+  unpaired_keydown_rate:
+    family: keystroke
+    dtype: float
+    unit: fraction
+    valid_range: [0.0, 1.0]
+    nullable: true
+    label: "Capture completeness"
+    description: "Non-repeat keydowns whose keyup never arrived, divided by non-repeat keydowns. A data-quality measure, not a behaviour one. Renamed from unmatched_keyup_rate."
+    display_as: percent
+    actionable: null
+
+  burst_len:
+    family: keystroke
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Longest uninterrupted run"
+    description: "Longest run of consecutive non-repeat keydowns with no gap above pause_threshold_ms. The longest in the window, not the one at its end."
+    display_as: count
+    actionable: null
+
+  # edit
+  edit_count:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Document changes"
+    description: "Edit events in the window. Programmatic reset edits are excluded from every edit feature."
+    display_as: count
+    actionable: null
+
+  typing_edit_count:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Typed changes"
+    description: "Edits with origin = typed."
+    display_as: count
+    actionable: null
+
+  paste_edit_count:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Pastes"
+    description: "Edits with origin = pasted, whatever their origin pane."
+    display_as: count
+    actionable: null
+
+  external_paste_count:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Pastes from outside the editor"
+    description: "Pastes with paste_origin = external ONLY. An undetermined origin is not evidence of an external one and is counted separately."
+    display_as: count
+    actionable: null
+
+  unknown_paste_count:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Pastes of undetermined origin"
+    description: "Pastes whose paste_origin is unknown or missing. Kept countable so uncertainty stays visible instead of being folded into either side."
+    display_as: count
+    actionable: null
+
+  undo_count:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Undos"
+    description: "Edits with origin = undo."
+    display_as: count
+    actionable: null
+
+  redo_count:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Redos"
+    description: "Edits with origin = redo."
+    display_as: count
+    actionable: null
+
+  paste_ratio:
+    family: edit
+    dtype: float
+    unit: fraction
+    valid_range: [0.0, 1.0]
+    nullable: true
+    label: "Share of changes that were pastes"
+    description: "Pastes divided by edits. Null when there were no edits -- a zero there would claim the candidate pasted none of their code when nothing was measured."
+    display_as: percent
+    actionable: null
+
+  inserted_len_sum:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Characters added"
+    description: "Total characters inserted across the window's edits."
+    display_as: count
+    actionable: null
+
+  inserted_len_max:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: true
+    label: "Largest single insertion"
+    description: "Characters inserted by the single largest edit. Null with no edits: a maximum over an empty set is undefined."
+    display_as: count
+    actionable: null
+
+  removed_len_sum:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Characters removed"
+    description: "Total characters deleted across the window's edits."
+    display_as: count
+    actionable: null
+
+  min_line:
+    family: edit
+    dtype: int
+    unit: line
+    valid_range: [1, null]
+    nullable: true
+    label: "First line touched"
+    description: "Lowest line number any edit touched. A summary, not a region -- two scattered edits do not make one block. Null with no edits."
+    display_as: line
+    actionable: null
+
+  max_line:
+    family: edit
+    dtype: int
+    unit: line
+    valid_range: [1, null]
+    nullable: true
+    label: "Last line touched"
+    description: "Highest line number any edit touched. Null with no edits."
+    display_as: line
+    actionable: null
+
+  edited_line_count:
+    family: edit
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Distinct lines touched"
+    description: "How many separate lines the edits covered. Exists so a window spanning lines 5 and 80 is visibly two edits, not a 76-line block."
+    display_as: count
+    actionable: null
+
+  pause_ms:
+    family: edit
+    dtype: float
+    unit: ms
+    valid_range: [0.0, null]
+    nullable: true
+    label: "Longest pause"
+    description: "Largest gap between consecutive typing events, across keystrokes and edits. Recomputed from perf_now, never read from the stored gap_ms. Null with no gap."
+    display_as: milliseconds
+    actionable: null
+
+  # run
+  run_count:
+    family: run
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Code runs started"
+    description: "Executions started within the window."
+    display_as: count
+    actionable: null
+
+  run_error_rate:
+    family: run
+    dtype: float
+    unit: fraction
+    valid_range: [0.0, 1.0]
+    nullable: true
+    label: "Failed run rate"
+    description: "Runs finishing in error or timeout, divided by runs that finished. Null when none finished in the window."
+    display_as: percent
+    actionable: null
+
+  runs_before_first_success:
+    family: run
+    dtype: int
+    unit: count
+    valid_range: [1, null]
+    nullable: true
+    label: "Runs until first success"
+    description: "Task-to-date, 1-based, counting the successful run itself: one failure then a success gives 2. Null until a run succeeds."
+    display_as: count
+    actionable: null
+
+  time_to_first_run:
+    family: run
+    dtype: float
+    unit: s
+    valid_range: [0.0, null]
+    nullable: true
+    label: "Time before first run"
+    description: "Task-to-date seconds from the task starting to the first execution. Null before any run."
+    display_as: seconds
+    actionable: null
+
+  edits_between_runs:
+    family: run
+    dtype: float
+    unit: count
+    valid_range: [0.0, null]
+    nullable: true
+    label: "Edits between runs"
+    description: "Task-to-date mean number of non-reset edits between consecutive run starts. Null with fewer than two runs."
+    display_as: number
+    actionable: null
+
+  # environment
+  blur_count:
+    family: environment
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Times focus left"
+    description: "Blur events during this task. Says focus left; never says where it went."
+    display_as: count
+    actionable: null
+
+  focus_count:
+    family: environment
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Times focus returned"
+    description: "Focus events during this task."
+    display_as: count
+    actionable: null
+
+  visibility_change_count:
+    family: environment
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Tab visibility changes"
+    description: "visibilitychange events during this task."
+    display_as: count
+    actionable: null
+
+  focus_switch_count:
+    family: environment
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Switches away"
+    description: "Transitions into an away state, where away means blurred or hidden. Counts the transition, not each contributing event."
+    display_as: count
+    actionable: null
+
+  copy_count:
+    family: environment
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Copies"
+    description: "Copy and cut events during this task. Cut is included."
+    display_as: count
+    actionable: null
+
+  copy_len_sum:
+    family: environment
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Characters copied"
+    description: "Total characters copied or cut. The text itself is never stored."
+    display_as: count
+    actionable: null
+
+  problem_copy_count:
+    family: environment
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Copies from the problem statement"
+    description: "Copies whose source pane was the problem statement rather than the editor."
+    display_as: count
+    actionable: null
+
+  copy_before_blur:
+    family: environment
+    dtype: int
+    unit: count
+    valid_range: [0, null]
+    nullable: false
+    label: "Copy then switch away"
+    description: "Copies followed by focus leaving the window within copy_before_blur_ms. Attributed to the window holding the copy. Evidence, never a verdict."
+    display_as: count
+    actionable: null
+
+  # window metadata
+  window_task_coverage_ms:
+    family: window
+    dtype: float
+    unit: ms
+    valid_range: [0.0, 30000.0]
+    nullable: false
+    label: "Task time inside this window"
+    description: "How much of the 30-second window overlapped the task. The first and last windows of a task cover only part of it, so their counts are naturally low -- this makes that visible rather than misleading. Weighting metadata, not a behaviour measure."
+    display_as: milliseconds
+    actionable: false
