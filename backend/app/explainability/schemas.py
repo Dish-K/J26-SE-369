@@ -138,9 +138,11 @@ class FeatureVector(_Frozen):
 
 
 class BackgroundReference(_Frozen):
-    """Identifies the versioned XAI background/reference sample for Phase 2.
+    """Identifies the versioned XAI background/reference sample.
 
-    Phase 1 only records which sample would be used; nothing is loaded.
+    The background is a C4-owned resource. ``dataset_version`` is its version;
+    ``uri`` locates the sample (CSV with one column per model feature).
+    ``compatible_model_version``, when set, restricts it to one C2 model.
     """
 
     reference_id: str = Field(min_length=1)
@@ -150,6 +152,8 @@ class BackgroundReference(_Frozen):
     split: str | None = None
     sample_count: int | None = Field(default=None, ge=1)
     uri: str | None = None
+    compatible_model_version: str | None = None
+    training_dataset_version: str | None = None
 
 
 class ModelArtifactMetadata(_Frozen):
@@ -233,4 +237,173 @@ class AnalysisContext(_Frozen):
             raise ValueError("model_input must be keyed in exact feature_names order")
         if self.representative_prediction.prediction_id != self.flag.representative_prediction_id:
             raise ValueError("representative_prediction is not the flag's representative")
+        return self
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: SHAP / LIME results
+#
+# Every result names the exact prediction, feature vector, model version and
+# target class it explains, so SHAP and LIME can be checked for alignment
+# before any comparison (Phase 3). Feature values are the ORIGINAL Contract-A
+# inputs, never preprocessed/scaled values.
+# ---------------------------------------------------------------------------
+
+Direction = Literal["toward_target", "away_from_target", "neutral"]
+ShapOutputSpace = Literal["raw", "log_odds", "probability"]
+ShapStrategyKind = Literal["linear", "tree", "model_agnostic"]
+
+
+def _finite(value: float, name: str) -> float:
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be finite, got {value}")
+    return value
+
+
+def _check_ranked(names: list[str], ranks: list[int]) -> None:
+    if len(set(names)) != len(names):
+        raise ValueError("feature names must be unique")
+    if sorted(ranks) != list(range(1, len(ranks) + 1)):
+        raise ValueError("ranks must be exactly 1..n")
+    if ranks != sorted(ranks):
+        raise ValueError("features must be listed in rank order")
+
+
+class ShapFeatureContribution(_Frozen):
+    name: str = Field(min_length=1)
+    value: float | None
+    shap_value: float
+    absolute_shap_value: float = Field(ge=0.0)
+    rank: int = Field(ge=1)
+    direction: Direction
+
+    @field_validator("shap_value")
+    @classmethod
+    def _finite_value(cls, value: float) -> float:
+        return _finite(value, "shap_value")
+
+
+class ShapExplanationResult(_Frozen):
+    """Local SHAP explanation of one representative C2 prediction."""
+
+    prediction_id: UUID
+    feature_vector_id: UUID
+    model_version: str = Field(min_length=1)
+    model_family: str = Field(min_length=1)
+    target_class: AICategory
+    target_class_index: int = Field(ge=0)
+    target_probability: float = Field(ge=0.0, le=1.0)
+    strategy: ShapStrategyKind
+    strategy_reason: str
+    explainer_type: str = Field(min_length=1)
+    output_space: ShapOutputSpace
+    output_description: str
+    background_id: str
+    background_version: str
+    base_value: float
+    model_output: float
+    reconstructed_output: float
+    reconstruction_error: float = Field(ge=0.0)
+    reconstruction_tolerance: float = Field(gt=0.0)
+    features: tuple[ShapFeatureContribution, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _check_result(self) -> "ShapExplanationResult":
+        for name in ("base_value", "model_output", "reconstructed_output"):
+            _finite(getattr(self, name), name)
+        _check_ranked([f.name for f in self.features], [f.rank for f in self.features])
+        if self.reconstruction_error > self.reconstruction_tolerance:
+            raise ValueError(
+                f"reconstruction_error {self.reconstruction_error} exceeds tolerance "
+                f"{self.reconstruction_tolerance}"
+            )
+        return self
+
+
+class GlobalShapFeatureImportance(_Frozen):
+    name: str = Field(min_length=1)
+    mean_abs_shap: float = Field(ge=0.0)
+    mean_shap: float
+    rank: int = Field(ge=1)
+
+
+class GlobalShapBeeswarm(_Frozen):
+    """Per-sample data for a future beeswarm plot (rows = samples)."""
+
+    feature_names: tuple[str, ...]
+    feature_values: tuple[tuple[float, ...], ...]
+    shap_values: tuple[tuple[float, ...], ...]
+
+
+class GlobalShapResult(_Frozen):
+    """Class-specific SHAP summary over many samples.
+
+    Research/dashboard summary only; never a substitute for the local
+    explanation of a representative prediction.
+    """
+
+    model_version: str = Field(min_length=1)
+    model_family: str = Field(min_length=1)
+    feature_schema_version: str = Field(min_length=1)
+    target_class: ClassName
+    target_class_index: int = Field(ge=0)
+    strategy: ShapStrategyKind
+    explainer_type: str
+    output_space: ShapOutputSpace
+    background_id: str
+    background_version: str
+    dataset_reference: str = Field(min_length=1)
+    sample_count: int = Field(ge=1)
+    max_reconstruction_error: float = Field(ge=0.0)
+    feature_importance: tuple[GlobalShapFeatureImportance, ...] = Field(min_length=1)
+    beeswarm: GlobalShapBeeswarm | None = None
+
+    @model_validator(mode="after")
+    def _check_result(self) -> "GlobalShapResult":
+        _check_ranked(
+            [f.name for f in self.feature_importance], [f.rank for f in self.feature_importance]
+        )
+        if self.beeswarm is not None and len(self.beeswarm.shap_values) != self.sample_count:
+            raise ValueError("beeswarm rows must equal sample_count")
+        return self
+
+
+class LimeFeatureContribution(_Frozen):
+    name: str = Field(min_length=1)
+    feature_index: int = Field(ge=0)
+    value: float | None
+    condition: str
+    weight: float
+    absolute_weight: float = Field(ge=0.0)
+    rank: int = Field(ge=1)
+    direction: Direction
+
+    @field_validator("weight")
+    @classmethod
+    def _finite_weight(cls, value: float) -> float:
+        return _finite(value, "weight")
+
+
+class LimeExplanationResult(_Frozen):
+    """One seeded LIME explanation of one representative C2 prediction."""
+
+    prediction_id: UUID
+    feature_vector_id: UUID
+    model_version: str = Field(min_length=1)
+    target_class: AICategory
+    target_class_index: int = Field(ge=0)
+    target_probability: float = Field(ge=0.0, le=1.0)
+    background_id: str
+    background_version: str
+    seed: int
+    num_samples: int = Field(ge=1)
+    discretize_continuous: bool
+    intercept: float | None = None
+    local_prediction: float | None = None
+    score: float | None = None
+    features: tuple[LimeFeatureContribution, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _check_result(self) -> "LimeExplanationResult":
+        _check_ranked([f.name for f in self.features], [f.rank for f in self.features])
         return self

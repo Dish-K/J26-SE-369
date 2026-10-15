@@ -53,6 +53,17 @@ class ClassifierAdapter:
     def get_threshold(self) -> float:
         return self._artifact.metadata.classification_threshold
 
+    def get_fitted_model(self) -> Any:
+        """The artifact's fitted object, for explainers that must inspect it.
+
+        Read-only: callers must not refit or mutate it.
+        """
+        return self._model
+
+    def model_input(self, rows: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarray:
+        """Rows in artifact feature order, shaped the way the fitted model expects."""
+        return self._as_model_input(rows)
+
     def prepare_features(self, features: Mapping[str, Any]) -> pd.DataFrame:
         """One-row frame of the model features, in artifact order.
 
