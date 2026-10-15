@@ -38,7 +38,12 @@ from backend.app.explainability.errors import (
 )
 from backend.app.explainability.model.artifact_loader import ARTIFACT_FILENAME
 from backend.app.explainability.persistence.repository import parse_c2_row
-from backend.app.explainability.schemas import ClassifierFlag, FeatureVector, WindowPrediction
+from backend.app.explainability.schemas import (
+    BackgroundReference,
+    ClassifierFlag,
+    FeatureVector,
+    WindowPrediction,
+)
 
 FIXTURE_DIR = Path(__file__).parent
 SCENARIO_PATH = FIXTURE_DIR / "c2_scenarios.json"
@@ -305,3 +310,47 @@ class FakeAsyncpgPool:
         else:
             raise AssertionError(f"unexpected fetch query: {query}")
         return [as_db_row(row) for row in rows]
+
+
+# --- Phase 2: C4 XAI background ---------------------------------------------
+
+BACKGROUND_FILENAME = "xai_background.csv"
+BACKGROUND_VERSION = "synthetic-prototype-background-v0"
+
+
+def background_frame() -> pd.DataFrame:
+    """Every 6th row of the prototype training frame (100 rows).
+
+    Training-reference data, as the plan requires: never the scenario windows
+    being explained and never a held-out test set.
+    """
+    frame, _ = _training_frame()
+    return frame.iloc[::6].reset_index(drop=True)
+
+
+def analysis_frame() -> pd.DataFrame:
+    """A different slice of the prototype distribution for global SHAP."""
+    frame, _ = _training_frame()
+    return frame.iloc[3::20].reset_index(drop=True)
+
+
+def background_reference(**overrides: Any) -> BackgroundReference:
+    values: dict[str, Any] = {
+        "reference_id": "prototype-xai-background",
+        "dataset_version": BACKGROUND_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "source": "synthetic prototype training frame (tests/explainability/fixtures)",
+        "split": "training_reference",
+        "sample_count": len(background_frame()),
+        "uri": BACKGROUND_FILENAME,
+        "compatible_model_version": MODEL_VERSION,
+        "training_dataset_version": "synthetic-prototype-fixture",
+    }
+    values.update(overrides)
+    return BackgroundReference(**values)
+
+
+def write_background(directory: Path) -> Path:
+    path = directory / BACKGROUND_FILENAME
+    background_frame().to_csv(path, index=False)
+    return path
