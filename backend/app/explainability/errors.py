@@ -81,3 +81,38 @@ class FeatureVectorProvenanceError(ExplainabilityContractError):
 
 class ModelInferenceError(ExplainabilityContractError):
     """The loaded model raised while scoring a validated feature vector."""
+
+
+# --- Phase 2: SHAP / LIME explanation failures -------------------------------
+
+
+class ExplanationError(ExplainabilityContractError):
+    """An explanation could not be produced or failed its own validity checks."""
+
+
+class UnsupportedModelForShapError(ExplanationError):
+    pass
+
+
+class ExplanationBackgroundMismatchError(ExplanationError):
+    """The XAI background is not compatible with the model or the analysis context."""
+
+
+class ExplanationShapeError(ExplanationError):
+    """An explainer returned attributions whose layout cannot be interpreted safely."""
+
+
+class TargetClassNotFoundError(ExplanationError):
+    pass
+
+
+class ShapReconstructionError(ExplanationError):
+    """base_value + sum(SHAP values) does not reproduce the explained model output."""
+
+
+class LimeExplanationError(ExplanationError):
+    pass
+
+
+class CanonicalFeatureMappingError(ExplanationError):
+    """An explainer's feature label cannot be mapped to exactly one model feature."""
