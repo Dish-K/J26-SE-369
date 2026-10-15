@@ -44,6 +44,45 @@ def _float(name: str, default: float) -> float:
 
 
 @dataclass(frozen=True)
+class ShapConfig:
+    """Development / PP1 SHAP settings. Not research constants.
+
+    reconstruction_tolerance:
+        Max |model_output - (base_value + sum(shap_values))| in the explainer's
+        own output space. Every strategy used here (linear, interventional tree,
+        exact/permutation) is additive by construction, so the only error is
+        floating-point; 1e-6 matches the C2 contract tolerance.
+    max_exact_features:
+        Model-agnostic strategy: exact Shapley enumeration (2^n coalitions) up
+        to this many features, a seeded permutation explainer above it.
+    permutation_seed:
+        Seed for the permutation explainer only.
+    """
+
+    reconstruction_tolerance: float = C2_CONTRACT_TOLERANCE
+    max_exact_features: int = 12
+    permutation_seed: int = 42
+
+
+@dataclass(frozen=True)
+class LimeConfig:
+    """Development / PP1 LIME settings. Not research constants.
+
+    One seeded run per explanation; repeated-run stability is Phase 3.
+    """
+
+    seed: int = 42
+    num_samples: int = 5000
+    discretize_continuous: bool = True
+
+
+# Attributions whose magnitude is at most this are reported as "neutral"
+# rather than toward/away from the target class. Purely numerical: it only
+# absorbs floating-point noise around exact zero.
+ATTRIBUTION_NEUTRAL_EPSILON = 1e-12
+
+
+@dataclass(frozen=True)
 class ExplainabilitySettings:
     """Locations of C2 artifacts and the shared registry, plus tolerances.
 
