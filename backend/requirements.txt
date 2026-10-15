@@ -11,3 +11,5 @@ scikit-learn==1.9.1
 numpy==2.4.6
 pandas==3.0.6
 PyYAML==6.0.3
+tree-sitter==0.25.2
+tree-sitter-python==0.25.0
