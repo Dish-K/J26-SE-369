@@ -16,3 +16,4 @@ tree-sitter-python==0.25.0
 lime==0.2.0.1
 shap==0.51.0; python_version < "3.12"
 shap==0.53.0; python_version >= "3.12"
+websockets==17.2
