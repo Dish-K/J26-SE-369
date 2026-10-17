@@ -69,7 +69,10 @@ jobs:
                 pg_isready
                 --username "$DB_USER"
                 --dbname "$DB_NAME"
-                
+
+            - name: Apply migrations
+              run: python -m backend.app.db.migrate
+
             - name: Run tests
               run: python -m pytest -v
 
