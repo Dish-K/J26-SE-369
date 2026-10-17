@@ -4,9 +4,12 @@ from uuid import uuid4
 
 import asyncpg
 import pytest
+from fastapi import WebSocketDisconnect
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from backend.app.db.pool import close_db_pool, create_db_pool
+from backend.app.main import app
 from backend.app.telemetry.ingest import EVENT_COLUMNS, Batch, event_rows
 from backend.app.telemetry.router import acked_up_to, store_batch
 
@@ -92,23 +95,25 @@ def database():
         pytest.skip(f"database not available: {exc}")
 
 
+_NEW_SESSION = (
+    "INSERT INTO sessions (session_id, candidate_id, language, started_at) "
+    "VALUES ($1, $2, 'python', now())"
+)
+# sessions last: ingested_batches has a foreign key to it.
+_SESSION_TABLES = ("events", "ingested_batches", "sessions")
+
+
 # Each test gets its own session row and removes its rows afterwards, even on failure.
 async def _in_new_session(scenario):
     pool = await create_db_pool()
     session = uuid4()
     try:
         async with pool.acquire() as connection:
-            await connection.execute(
-                "INSERT INTO sessions (session_id, candidate_id, language, started_at) "
-                "VALUES ($1, $2, 'python', now())",
-                session,
-                uuid4(),
-            )
+            await connection.execute(_NEW_SESSION, session, uuid4())
             try:
                 await scenario(connection, session)
             finally:
-                # sessions last: ingested_batches has a foreign key to it.
-                for table in ("events", "ingested_batches", "sessions"):
+                for table in _SESSION_TABLES:
                     await connection.execute(f"DELETE FROM {table} WHERE session_id = $1", session)
     finally:
         await close_db_pool(pool)
@@ -183,3 +188,69 @@ def test_event_columns_match_the_events_table(database):
         assert {column["column_name"] for column in columns} == set(EVENT_COLUMNS)
 
     asyncio.run(_in_new_session(scenario))
+
+
+def _sql(statement, *args):
+    async def run():
+        pool = await create_db_pool()
+        try:
+            return await pool.fetch(statement, *args)
+        finally:
+            await close_db_pool(pool)
+
+    return asyncio.run(run())
+
+
+# The endpoint runs with its own pool, so the session row must be committed before it connects.
+@pytest.fixture
+def session(database):
+    session_id = uuid4()
+    _sql(_NEW_SESSION, session_id, uuid4())
+    yield session_id
+    for table in _SESSION_TABLES:
+        _sql(f"DELETE FROM {table} WHERE session_id = $1", session_id)
+
+
+def _ack(up_to):
+    return {"ack": {"load_seq": 0, "up_to_batch_seq": up_to}}
+
+
+def _close_code(message):
+    with TestClient(app) as client, client.websocket_connect("/ws/telemetry") as websocket:
+        websocket.send_text(message)
+        with pytest.raises(WebSocketDisconnect) as closed:
+            websocket.receive_json()
+    return closed.value.code
+
+
+def test_the_endpoint_acks_a_resent_batch_without_storing_it_again(session):
+    batch = _batch(_key(0, 1.0), session=session).model_dump_json()
+    with TestClient(app) as client, client.websocket_connect("/ws/telemetry") as websocket:
+        websocket.send_text(batch)
+        assert websocket.receive_json() == _ack(0)
+        websocket.send_text(batch)
+        assert websocket.receive_json() == _ack(0)
+
+    assert _sql("SELECT count(*) FROM events WHERE session_id = $1", session)[0][0] == 1
+
+
+def test_the_endpoint_never_acks_past_a_missing_batch(session):
+    with TestClient(app) as client, client.websocket_connect("/ws/telemetry") as websocket:
+        for batch_seq, up_to in ((0, 0), (2, 0), (1, 2)):
+            batch = _batch(_key(0, float(batch_seq)), batch_seq=batch_seq, session=session)
+            websocket.send_text(batch.model_dump_json())
+            assert websocket.receive_json() == _ack(up_to)
+
+
+def test_an_invalid_batch_closes_the_connection(database):
+    assert _close_code('{"events": []}') == 1008
+
+
+def test_a_batch_for_an_unknown_session_closes_the_connection(database):
+    assert _close_code(_batch(_key(0, 1.0), session=uuid4()).model_dump_json()) == 1008
+
+
+# modifiers breaks a CHECK; key_class is too big for SMALLINT and fails inside COPY.
+@pytest.mark.parametrize("bad", [{"modifiers": 99}, {"key_class": 70_000}])
+def test_a_batch_the_database_rejects_closes_the_connection(session, bad):
+    assert _close_code(_batch(_key(0, 1.0) | bad, session=session).model_dump_json()) == 1011

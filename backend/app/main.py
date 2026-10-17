@@ -8,6 +8,7 @@ from backend.app.db.pool import (
     close_db_pool,
     create_db_pool,
 )
+from backend.app.telemetry.router import router as telemetry_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await close_db_pool(pool)
 
 app = FastAPI(title="CodeTrace", lifespan=lifespan)
+app.include_router(telemetry_router)
 
 
 @app.get("/health")
@@ -34,7 +36,7 @@ async def health(request: Request) -> dict[str, str]:
                 "database": "unavailable",
             },
         )
-    
+
     return {
         "status": "ok",
         "database": "ok",

@@ -1,8 +1,15 @@
+import logging
 from uuid import UUID
 
 import asyncpg
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from pydantic import ValidationError
 
 from backend.app.telemetry.ingest import EVENT_COLUMNS, TYPING_KINDS, Batch, event_rows
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
 
 # RETURNING gives a row only for a new batch, which is how a resend is spotted.
 _RECORD_BATCH = """
@@ -35,6 +42,9 @@ WHERE NOT EXISTS (
   WHERE session_id = $1 AND load_seq = $2 AND batch_seq = candidates.n
 )
 """
+
+# COPY raises a plain OverflowError, not a database error, for a number too big for its column.
+_STORE_ERRORS = (asyncpg.PostgresError, asyncpg.InterfaceError, OverflowError, OSError)
 
 async def previous_typing(connection: asyncpg.Connection, batch: Batch) -> dict[UUID, float]:
     task_ids = {event.task_id for event in batch.events if event.kind in TYPING_KINDS}
@@ -70,3 +80,46 @@ async def store_batch(connection: asyncpg.Connection, batch: Batch, offset_ms: f
 
 async def acked_up_to(connection: asyncpg.Connection, session_id: UUID, load_seq: int) -> int:
     return await connection.fetchval(_ACKED_UP_TO, session_id, load_seq)
+
+@router.websocket("/ws/telemetry")
+async def telemetry(websocket: WebSocket) -> None:
+    await websocket.accept()
+    pool = websocket.app.state.db_pool
+
+    try:
+        while True:
+            message = await websocket.receive_text()
+
+            try:
+                batch = Batch.model_validate_json(message)
+            except ValidationError as exc:
+                # include_input=False keeps pasted text out of the logs.
+                logger.warning(
+                    "Refused telemetry batch: %s",
+                    exc.errors(include_input=False, include_url=False),
+                )
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="invalid batch")
+                return
+
+            try:
+                async with pool.acquire() as connection:
+                    # Zero until the Step 5 clock handshake gives a real offset.
+                    await store_batch(connection, batch, offset_ms=0.0)
+                    up_to = await acked_up_to(connection, batch.session_id, batch.load_seq)
+            except asyncpg.ForeignKeyViolationError:
+                logger.warning("Refused telemetry batch for unknown session %s", batch.session_id)
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="unknown session")
+                return
+            except _STORE_ERRORS:
+                logger.exception(
+                    "Could not store batch %s of session %s", batch.batch_seq, batch.session_id
+                )
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="batch not stored")
+                return
+
+            if up_to >= 0:
+                await websocket.send_json(
+                    {"ack": {"load_seq": batch.load_seq, "up_to_batch_seq": up_to}}
+                )
+    except WebSocketDisconnect:
+        pass
