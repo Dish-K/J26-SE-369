@@ -407,3 +407,291 @@ class LimeExplanationResult(_Frozen):
     def _check_result(self) -> "LimeExplanationResult":
         _check_ranked([f.name for f in self.features], [f.rank for f in self.features])
         return self
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: explanation reliability results
+#
+# Every result carries the provenance of the one prediction it evaluates and
+# keeps its components, so no composite hides the evidence behind it. A
+# metric that is mathematically undefined for its inputs has
+# status="not_computable" and a reason; its score is None, never 0 or 0.5.
+# None of these scores is a probability that an explanation is correct.
+# ---------------------------------------------------------------------------
+
+MetricStatus = Literal["computed", "not_computable"]
+RankingSource = Literal["shap", "lime", "consensus"]
+
+
+def _unit_or_none(value: float | None, name: str) -> float | None:
+    if value is not None and not (math.isfinite(value) and 0.0 <= value <= 1.0):
+        raise ValueError(f"{name} must be in [0, 1], got {value}")
+    return value
+
+
+def _check_status(status: str, score: float | None, reason: str | None, what: str) -> None:
+    if status == "computed" and score is None:
+        raise ValueError(f"{what}: computed status requires a score")
+    if status == "not_computable" and (score is not None or not reason):
+        raise ValueError(f"{what}: not_computable requires no score and a reason")
+
+
+class _Provenance(_Frozen):
+    prediction_id: UUID
+    feature_vector_id: UUID
+    model_version: str = Field(min_length=1)
+    target_class: AICategory
+    target_class_index: int = Field(ge=0)
+
+
+class AgreementAtKResult(_Frozen):
+    k: int = Field(ge=1)
+    shap_top_features: tuple[str, ...]
+    lime_top_features: tuple[str, ...]
+    intersection: tuple[str, ...]
+    overlap_at_k: float
+    jaccard: float
+    feature_set_agreement: float
+    comparable_direction_features: tuple[str, ...]
+    same_direction_features: tuple[str, ...]
+    different_direction_features: tuple[str, ...]
+    direction_status: Literal["computed", "no_common_top_k_features"]
+    direction_agreement: float
+    status: MetricStatus
+    agreement_score: float | None = None
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> "AgreementAtKResult":
+        for name in (
+            "overlap_at_k",
+            "jaccard",
+            "feature_set_agreement",
+            "direction_agreement",
+            "agreement_score",
+        ):
+            _unit_or_none(getattr(self, name), name)
+        _check_status(self.status, self.agreement_score, self.reason, f"agreement@{self.k}")
+        return self
+
+
+class AgreementResult(_Provenance):
+    """SHAP-LIME agreement (agreement_v1_hierarchical) at every configured K.
+
+    Rank agreement uses the full canonical feature universe and is therefore
+    shared by all K; feature-set and direction agreement are per K.
+    """
+
+    version: str
+    feature_count: int = Field(ge=1)
+    spearman_raw: float | None = None
+    spearman_normalized: float | None = None
+    kendall_raw: float | None = None
+    kendall_normalized: float | None = None
+    rank_agreement: float | None = None
+    rank_status: MetricStatus
+    rank_reason: str | None = None
+    at_k: tuple[AgreementAtKResult, ...] = Field(min_length=1)
+    primary_top_k: int
+    status: MetricStatus
+    score: float | None = None
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> "AgreementResult":
+        for name in ("spearman_normalized", "kendall_normalized", "rank_agreement", "score"):
+            _unit_or_none(getattr(self, name), name)
+        _check_status(self.rank_status, self.rank_agreement, self.rank_reason, "rank agreement")
+        _check_status(self.status, self.score, self.reason, "agreement")
+        if self.primary_top_k not in {r.k for r in self.at_k}:
+            raise ValueError("primary_top_k has no result")
+        return self
+
+
+class LimeFitSummary(_Frozen):
+    """LIME local-surrogate fit (its R^2 score) across runs; reported, never used to filter."""
+
+    count: int = Field(ge=0)
+    mean: float | None = None
+    median: float | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+    std: float | None = None
+
+
+class FailedLimeRun(_Frozen):
+    seed: int
+    error_type: str
+    message: str
+
+
+class StabilityAtKResult(_Frozen):
+    k: int = Field(ge=1)
+    pair_count: int = Field(ge=0)
+    set_stability: float | None = None
+    min_pairwise_jaccard: float | None = None
+    max_pairwise_jaccard: float | None = None
+    std_pairwise_jaccard: float | None = None
+    status: MetricStatus
+    stability_score: float | None = None
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> "StabilityAtKResult":
+        for name in (
+            "set_stability",
+            "min_pairwise_jaccard",
+            "max_pairwise_jaccard",
+            "stability_score",
+        ):
+            _unit_or_none(getattr(self, name), name)
+        _check_status(self.status, self.stability_score, self.reason, f"stability@{self.k}")
+        return self
+
+
+class StabilityResult(_Provenance):
+    """Repeated-seed LIME stability (stability_v1). Keeps every run."""
+
+    version: str
+    repetitions_requested: int = Field(ge=2)
+    successful_runs: int = Field(ge=0)
+    failed_runs: tuple[FailedLimeRun, ...]
+    seeds: tuple[int, ...]
+    lime_num_samples: int = Field(ge=1)
+    lime_discretize_continuous: bool
+    background_id: str
+    background_version: str
+    pair_count: int = Field(ge=0)
+    mean_spearman_normalized: float | None = None
+    mean_kendall_normalized: float | None = None
+    rank_stability: float | None = None
+    rank_status: MetricStatus
+    rank_reason: str | None = None
+    at_k: tuple[StabilityAtKResult, ...] = Field(min_length=1)
+    primary_top_k: int
+    status: MetricStatus
+    score: float | None = None
+    reason: str | None = None
+    lime_fit: LimeFitSummary
+    runs: tuple[LimeExplanationResult, ...]
+
+    @model_validator(mode="after")
+    def _check(self) -> "StabilityResult":
+        for name in (
+            "mean_spearman_normalized",
+            "mean_kendall_normalized",
+            "rank_stability",
+            "score",
+        ):
+            _unit_or_none(getattr(self, name), name)
+        _check_status(self.rank_status, self.rank_stability, self.rank_reason, "rank stability")
+        _check_status(self.status, self.score, self.reason, "stability")
+        if self.successful_runs + len(self.failed_runs) != self.repetitions_requested:
+            raise ValueError("successful + failed runs must equal repetitions requested")
+        if len(self.runs) != self.successful_runs or len(self.seeds) != self.repetitions_requested:
+            raise ValueError("runs/seeds do not match the run counts")
+        return self
+
+
+class FaithfulnessAtKResult(_Frozen):
+    k: int = Field(ge=1)
+    top_features: tuple[str, ...]
+    baseline_features: tuple[str, ...]
+    p_top: float = Field(ge=0.0, le=1.0)
+    p_base: float = Field(ge=0.0, le=1.0)
+    raw_delta_top: float  # signed p0 - p_top; may be negative
+    raw_delta_base: float
+    d_top: float = Field(ge=0.0)
+    d_base: float = Field(ge=0.0)
+    top_probabilities: tuple[float, ...]
+    baseline_probabilities: tuple[float, ...]
+    status: MetricStatus
+    score: float | None = None
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> "FaithfulnessAtKResult":
+        _unit_or_none(self.score, "faithfulness")
+        _check_status(self.status, self.score, self.reason, f"faithfulness@{self.k}")
+        if set(self.top_features) & set(self.baseline_features):
+            raise ValueError("top and baseline feature sets must be disjoint")
+        return self
+
+
+class FaithfulnessResult(_Provenance):
+    """Perturbation faithfulness (faithfulness_v1) in target-class probability space."""
+
+    version: str
+    ranking_source: RankingSource
+    ranking: tuple[str, ...]
+    perturbation_method: str
+    perturbation_samples: int = Field(ge=1)
+    perturbation_seed: int
+    replacement_row_indices: tuple[int, ...]
+    background_id: str
+    background_version: str
+    epsilon: float = Field(gt=0.0)
+    min_total_effect: float = Field(ge=0.0)
+    p0: float = Field(ge=0.0, le=1.0)
+    at_k: tuple[FaithfulnessAtKResult, ...] = Field(min_length=1)
+    primary_top_k: int
+    status: MetricStatus
+    score: float | None = None
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> "FaithfulnessResult":
+        _unit_or_none(self.score, "faithfulness")
+        _check_status(self.status, self.score, self.reason, "faithfulness")
+        if len(self.replacement_row_indices) != self.perturbation_samples:
+            raise ValueError("replacement_row_indices must have perturbation_samples entries")
+        return self
+
+
+class EcsResult(_Provenance):
+    """Explanation Confidence Score: a composite reliability INDICATOR under the
+    defined agreement/stability/faithfulness framework. Not a probability."""
+
+    version: str
+    status: MetricStatus
+    agreement_score: float | None = None
+    stability_score: float | None = None
+    faithfulness_score: float | None = None
+    weights: dict[str, float]
+    score: float | None = None
+    missing_components: tuple[str, ...] = ()
+    reason: str | None = None
+    agreement_version: str
+    agreement_top_k: int
+    stability_version: str
+    stability_top_k: int
+    stability_repetitions: int
+    faithfulness_version: str
+    faithfulness_top_k: int
+    faithfulness_ranking_source: RankingSource
+
+    @model_validator(mode="after")
+    def _check(self) -> "EcsResult":
+        for name in ("agreement_score", "stability_score", "faithfulness_score", "score"):
+            _unit_or_none(getattr(self, name), name)
+        _check_status(self.status, self.score, self.reason, "ECS")
+        return self
+
+
+class EcsSensitivityScenario(_Frozen):
+    name: str = Field(min_length=1)
+    weights: dict[str, float]
+    status: MetricStatus
+    score: float | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> "EcsSensitivityScenario":
+        _unit_or_none(self.score, "scenario score")
+        if self.status == "computed" and self.score is None:
+            raise ValueError("computed scenario requires a score")
+        return self
+
+
+class EcsSensitivityResult(_Provenance):
+    baseline_version: str
+    scenarios: tuple[EcsSensitivityScenario, ...] = Field(min_length=1)
