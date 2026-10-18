@@ -57,7 +57,15 @@ class LimeExplainer:
         context: AnalysisContext,
         adapter: ClassifierAdapter,
         background: XaiBackground,
+        *,
+        seed: int | None = None,
     ) -> LimeExplanationResult:
+        """Explain with ``seed`` if given, else the configured seed.
+
+        The override lets repeated-run stability vary only the seed without
+        mutating shared configuration.
+        """
+        seed = self._config.seed if seed is None else seed
         check_alignment(context, adapter, background)
         prediction = context.representative_prediction
         class_index = context.target_class_index
@@ -70,7 +78,7 @@ class LimeExplainer:
             feature_names=list(feature_names),
             class_names=list(adapter.get_class_names()),
             discretize_continuous=self._config.discretize_continuous,
-            random_state=self._config.seed,
+            random_state=seed,
         )
         # Every LIME model call goes through the validated Phase 1 adapter.
         explanation = explainer.explain_instance(
@@ -140,7 +148,7 @@ class LimeExplainer:
             adapter.get_model_version(),
             context.target_class,
             class_index,
-            self._config.seed,
+            seed,
             self._config.num_samples,
             background.background_id,
             background.background_version,
@@ -154,7 +162,7 @@ class LimeExplainer:
             target_probability=target_probability,
             background_id=background.background_id,
             background_version=background.background_version,
-            seed=self._config.seed,
+            seed=seed,
             num_samples=self._config.num_samples,
             discretize_continuous=self._config.discretize_continuous,
             intercept=_optional_float(explanation.intercept.get(class_index)),

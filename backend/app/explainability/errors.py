@@ -116,3 +116,15 @@ class LimeExplanationError(ExplanationError):
 
 class CanonicalFeatureMappingError(ExplanationError):
     """An explainer's feature label cannot be mapped to exactly one model feature."""
+
+
+# --- Phase 3: explanation reliability metrics -------------------------------
+
+
+class ExplanationAlignmentError(ExplanationError):
+    """Explanations or metric results being combined do not describe the same
+    prediction, feature vector, model version, target class and features."""
+
+
+class InvalidMetricConfigurationError(ExplanationError):
+    """A reliability metric was configured with values it cannot use (e.g. K out of range)."""
