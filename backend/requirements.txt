@@ -17,3 +17,5 @@ lime==0.2.0.1
 shap==0.51.0; python_version < "3.12"
 shap==0.53.0; python_version >= "3.12"
 websockets==17.2
+scipy==1.17.1; python_version < "3.12"
+scipy==1.18.1; python_version >= "3.12"
