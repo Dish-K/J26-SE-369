@@ -1,11 +1,17 @@
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import asyncpg
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
-from backend.app.telemetry.ingest import EVENT_COLUMNS, TYPING_KINDS, Batch, event_rows
+from backend.app.telemetry.ingest import (
+    EVENT_COLUMNS,
+    TYPING_KINDS,
+    Batch,
+    SessionStart,
+    event_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +47,21 @@ WHERE NOT EXISTS (
   SELECT 1 FROM ingested_batches
   WHERE session_id = $1 AND load_seq = $2 AND batch_seq = candidates.n
 )
+"""
+
+# Submissions are Python only, C3 parses them as Python.
+_NEW_SESSION = """
+INSERT INTO sessions (
+  session_id, candidate_id, language, started_at,
+  editor_profile, editor_config_hash, user_agent, platform,
+  screen_w, screen_h, viewport_w, viewport_h, device_pixel_ratio, locale, timezone
+)
+VALUES ($1, $2, 'python', now(), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+"""
+
+_FIRST_TASK = """
+INSERT INTO tasks (task_id, session_id, seq, origin, status, created_at, started_at)
+VALUES ($1, $2, 0, 'original', 'active', now(), now())
 """
 
 # COPY raises a plain OverflowError, not a database error, for a number too big for its column.
@@ -80,6 +101,34 @@ async def store_batch(connection: asyncpg.Connection, batch: Batch, offset_ms: f
 
 async def acked_up_to(connection: asyncpg.Connection, session_id: UUID, load_seq: int) -> int:
     return await connection.fetchval(_ACKED_UP_TO, session_id, load_seq)
+
+@router.post("/telemetry/sessions", status_code=status.HTTP_201_CREATED)
+async def start_session(start: SessionStart, request: Request) -> dict[str, UUID]:
+    session_id = uuid4()
+    task_id = uuid4()
+
+    async with request.app.state.db_pool.acquire() as connection:
+        async with connection.transaction():
+            await connection.execute(
+                _NEW_SESSION,
+                session_id,
+                # A placeholder until candidates log in.
+                uuid4(),
+                start.editor_profile,
+                start.editor_config_hash,
+                start.user_agent,
+                start.platform,
+                start.screen_w,
+                start.screen_h,
+                start.viewport_w,
+                start.viewport_h,
+                start.device_pixel_ratio,
+                start.locale,
+                start.timezone,
+            )
+            await connection.execute(_FIRST_TASK, task_id, session_id)
+
+    return {"session_id": session_id, "task_id": task_id}
 
 @router.websocket("/ws/telemetry")
 async def telemetry(websocket: WebSocket) -> None:

@@ -1,6 +1,6 @@
 import asyncio
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import asyncpg
 import pytest
@@ -99,8 +99,8 @@ _NEW_SESSION = (
     "INSERT INTO sessions (session_id, candidate_id, language, started_at) "
     "VALUES ($1, $2, 'python', now())"
 )
-# sessions last: ingested_batches has a foreign key to it.
-_SESSION_TABLES = ("events", "ingested_batches", "sessions")
+# sessions last: the other tables point to it.
+_SESSION_TABLES = ("events", "ingested_batches", "tasks", "sessions")
 
 
 # Each test gets its own session row and removes its rows afterwards, even on failure.
@@ -254,3 +254,68 @@ def test_a_batch_for_an_unknown_session_closes_the_connection(database):
 @pytest.mark.parametrize("bad", [{"modifiers": 99}, {"key_class": 70_000}])
 def test_a_batch_the_database_rejects_closes_the_connection(session, bad):
     assert _close_code(_batch(_key(0, 1.0) | bad, session=session).model_dump_json()) == 1011
+
+_SESSION_START = {
+    "editor_profile": "research-v1",
+    "editor_config_hash": "a" * 64,
+    "user_agent": "pytest",
+    "platform": "Linux x86_64",
+    "screen_w": 1920,
+    "screen_h": 1080,
+    "viewport_w": 1280,
+    "viewport_h": 720,
+    "device_pixel_ratio": 1.5,
+    "locale": "en-GB",
+    "timezone": "Asia/Colombo",
+}
+
+
+# Deletes every session a test started through the endpoint, even on failure.
+@pytest.fixture
+def started(database):
+    sessions = []
+    yield sessions
+    for session_id in sessions:
+        for table in _SESSION_TABLES:
+            _sql(f"DELETE FROM {table} WHERE session_id = $1", session_id)
+
+
+def _start(client, started):
+    response = client.post("/telemetry/sessions", json=_SESSION_START)
+    assert response.status_code == 201
+    ids = {key: UUID(value) for key, value in response.json().items()}
+    started.append(ids["session_id"])
+    return ids
+
+
+def test_starting_a_session_creates_the_session_and_its_first_task(started):
+    with TestClient(app) as client:
+        ids = _start(client, started)
+
+    session = _sql("SELECT * FROM sessions WHERE session_id = $1", ids["session_id"])[0]
+    assert {key: session[key] for key in _SESSION_START} == _SESSION_START
+    assert session["language"] == "python"
+
+    task = _sql("SELECT * FROM tasks WHERE task_id = $1", ids["task_id"])[0]
+    assert (task["session_id"], task["seq"], task["origin"], task["status"]) == (
+        ids["session_id"], 0, "original", "active",
+    )
+
+
+def test_a_started_session_accepts_keystrokes(started):
+    with TestClient(app) as client:
+        ids = _start(client, started)
+        batch = _batch(_key(0, 1.0, task=ids["task_id"]), session=ids["session_id"])
+        with client.websocket_connect("/ws/telemetry") as websocket:
+            websocket.send_text(batch.model_dump_json())
+            assert websocket.receive_json() == _ack(0)
+
+
+# The browser may not pick the language; a bad hash or size is refused before the database.
+@pytest.mark.parametrize(
+    "bad", [{"editor_config_hash": "not-a-hash"}, {"screen_w": 0}, {"language": "java"}]
+)
+def test_a_bad_session_start_is_refused(database, bad):
+    with TestClient(app) as client:
+        response = client.post("/telemetry/sessions", json=_SESSION_START | bad)
+    assert response.status_code == 422

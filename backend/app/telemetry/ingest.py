@@ -64,6 +64,22 @@ class Batch(BaseModel):
     batch_seq: int = Field(ge=0)
     events: list[Event] = Field(min_length=1)
 
+class SessionStart(BaseModel):
+    # The server sets the ids, the candidate and the language. (The browser won't send them)
+    model_config = ConfigDict(extra="forbid")
+
+    editor_profile: str = Field(min_length=1)
+    editor_config_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    user_agent: str | None = None
+    platform: str | None = None
+    screen_w: int | None = Field(default=None, gt=0)
+    screen_h: int | None = Field(default=None, gt=0)
+    viewport_w: int | None = Field(default=None, gt=0)
+    viewport_h: int | None = Field(default=None, gt=0)
+    device_pixel_ratio: float | None = Field(default=None, gt=0)
+    locale: str | None = None
+    timezone: str | None = None
+
 # Read from Event, so the row values and the COPY column list cannot drift apart.
 CLIENT_COLUMNS = tuple(Event.model_fields)
 EVENT_COLUMNS = ("time", "session_id", "load_seq", "batch_seq", "gap_ms", *CLIENT_COLUMNS)
