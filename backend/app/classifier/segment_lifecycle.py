@@ -33,6 +33,17 @@ class LifecycleSnapshot:
         return tuple(s for s in self.closed_segments if flag_id_for_segment(s) not in saved)
 
 
+@dataclass(frozen=True)
+class LifecycleRecoveryInputs:
+    """Original accepted inputs, not a new C1 or dashboard contract."""
+
+    session_id: UUID
+    task_id: UUID
+    model_version: str
+    frames: tuple[tuple[ClassifiedWindow, tuple[dict[str, Any], ...]], ...]
+    finished: bool
+
+
 class SegmentLifecycle:
     """One session/task/model stream; callers serialize operations on an instance.
 
@@ -56,6 +67,7 @@ class SegmentLifecycle:
         self._closed_ids: set[UUID] = set()
         self._persisted: set[UUID] = set()
         self._finished = False
+        self._recovery_frames: tuple[tuple[ClassifiedWindow, tuple[dict[str, Any], ...]], ...] = ()
 
     def _check_stream(self, window: ClassifiedWindow) -> None:
         if (
@@ -152,7 +164,21 @@ class SegmentLifecycle:
             raise LifecycleInputConflict("A closed segment would become active again")
         self._windows, self._history, self._segments = windows, history, segments
         self._closed_ids = closed
+        self._recovery_frames += ((deepcopy(candidate), deepcopy(history)),)
         return self.snapshot()
+
+    def recovery_inputs(self) -> LifecycleRecoveryInputs:
+        """Return detached original observations and history as accepted per step.
+
+        A recovery checkpoint must freeze these inputs rather than re-query
+        current telemetry. Persistence acknowledgements are deliberately not
+        included: recovered closed flags must be checked/retried through Task 12.
+        """
+        return deepcopy(LifecycleRecoveryInputs(
+            session_id=self._session_id, task_id=self._task_id,
+            model_version=self._model_version, frames=self._recovery_frames,
+            finished=self._finished,
+        ))
 
     def snapshot(self) -> LifecycleSnapshot:
         """Read state without closing segments; safe to inspect during an interruption."""
