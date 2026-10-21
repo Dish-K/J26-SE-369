@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from backend.app.telemetry.clock import HANDSHAKE_SAMPLES, ClockSample
+
 # Same kinds as events_task_scoped_have_task_chk, checked here so the error names the field.
 TASK_SCOPED_KINDS = frozenset({0, 1, 2, 8, 9})
 TYPING_KINDS = frozenset({0, 1, 2})
@@ -79,6 +81,22 @@ class SessionStart(BaseModel):
     device_pixel_ratio: float | None = Field(default=None, gt=0)
     locale: str | None = None
     timezone: str | None = None
+
+class Hello(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: UUID
+
+class Ping(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    t0: float
+
+class ClockSamples(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    samples: list[ClockSample] = Field(min_length=HANDSHAKE_SAMPLES, max_length=HANDSHAKE_SAMPLES)
+
 
 # Read from Event, so the row values and the COPY column list cannot drift apart.
 CLIENT_COLUMNS = tuple(Event.model_fields)

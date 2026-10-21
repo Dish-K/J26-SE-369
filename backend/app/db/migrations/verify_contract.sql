@@ -97,17 +97,17 @@ BEGIN
   INSERT INTO classifier_flag_predictions (flag_id, prediction_id)
   VALUES (f2, p1);
 
-  -- An exact duplicate episode must be rejected.
+  -- Since 010, flag_id alone identifies a flag, so saving the same flag_id twice must fail.
   BEGIN
     INSERT INTO classifier_flags (
-      task_id, model_version, category, representative_prediction_id,
+      flag_id, task_id, model_version, category, representative_prediction_id,
       class_probabilities, confidence,
       detected_start_line, detected_end_line,
       evidence_kinds, segment_basis, window_count,
       detected_at, detected_until
     )
     SELECT
-      task_id, model_version, category, representative_prediction_id,
+      flag_id, task_id, model_version, category, representative_prediction_id,
       class_probabilities, confidence,
       detected_start_line, detected_end_line,
       evidence_kinds, segment_basis, window_count,
@@ -119,7 +119,7 @@ BEGIN
   END;
 
   IF NOT duplicate_rejected THEN
-    RAISE EXCEPTION 'duplicate classifier episode was not rejected';
+    RAISE EXCEPTION 'a repeated flag_id was not rejected';
   END IF;
 
   INSERT INTO task_submissions (

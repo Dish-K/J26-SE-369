@@ -6,13 +6,21 @@ import { useEffect, useState } from "react";
 
 import { attachCapture } from "./capture/capture";
 import { ACTIVE_PROFILE, EDITOR_PROFILES, MONACO_VERSION } from "./capture/editorOptions";
-import { type TelemetryClient, telemetryClient } from "./capture/telemetryClient";
+import { type CaptureStatus, type TelemetryClient, telemetryClient } from "./capture/telemetryClient";
 
 // Load the pinned Monaco, so the version in the fingerprint is the one that runs.
 loader.config({ paths: { vs: `https://cdn.jsdelivr.net/npm/monaco-editor@${MONACO_VERSION}/min/vs` } });
 
+const NOTICES: Partial<Record<CaptureStatus, string>> = {
+  connecting: "Connecting...",
+  reconnecting: "Reconnecting...",
+  blocked: "This interview is already open in another tab. Return to that tab, or close it to continue here.",
+  stopped: "The connection was lost. Reload the page to continue.",
+};
+
 export default function CodeEditor() {
   const [client, setClient] = useState<TelemetryClient | null>(null);
+  const [status, setStatus] = useState<CaptureStatus>("connecting");
   const [instance, setInstance] = useState<editor.IStandaloneCodeEditor | null>(null);
 
   useEffect(() => {
@@ -20,6 +28,8 @@ export default function CodeEditor() {
       .then(setClient)
       .catch((error: unknown) => console.error(error));
   }, []);
+
+  useEffect(() => client?.onStatus(setStatus), [client]);
 
   useEffect(() => {
     if (!instance || !client) {
@@ -29,14 +39,27 @@ export default function CodeEditor() {
   }, [instance, client]);
 
   const handleMount: OnMount = (mounted) => setInstance(mounted);
+  const notice = NOTICES[status];
 
   return (
-    <Editor
-      height="60vh"
-      defaultLanguage="python"
-      // Read-only until the session exists, so no keystroke goes unrecorded.
-      options={{ ...EDITOR_PROFILES[ACTIVE_PROFILE], readOnly: client === null }}
-      onMount={handleMount}
-    />
+    <>
+      {notice && (
+        <p className="editor-notice" role="status">
+          {notice}
+          {status === "blocked" && (
+            <button className="button button-accent" type="button" onClick={() => client?.retry()}>
+              Try Again
+            </button>
+          )}
+        </p>
+      )}
+      <Editor
+        height="60vh"
+        defaultLanguage="python"
+        // Read-only unless capture is ready, so no keystroke goes unrecorded.
+        options={{ ...EDITOR_PROFILES[ACTIVE_PROFILE], readOnly: status !== "ready" }}
+        onMount={handleMount}
+      />
+    </>
   );
 }

@@ -1,14 +1,27 @@
+import json
 import logging
+from time import time_ns
 from uuid import UUID, uuid4
 
 import asyncpg
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
+
+from backend.app.telemetry.clock_store import (
+    NotSessionOwner,
+    SessionLocks,
+    UnknownSession,
+    store_clock_samples,
+    stored_offset,
+)
 
 from backend.app.telemetry.ingest import (
     EVENT_COLUMNS,
     TYPING_KINDS,
     Batch,
+    ClockSamples,
+    Hello,
+    Ping,
     SessionStart,
     event_rows,
 )
@@ -16,6 +29,9 @@ from backend.app.telemetry.ingest import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Close codes 4000-4999 are free for applications, the browser shows its blocked-tab message for this one.
+SESSION_OPEN_ELSEWHERE = 4409
 
 # RETURNING gives a row only for a new batch, which is how a resend is spotted.
 _RECORD_BATCH = """
@@ -130,45 +146,137 @@ async def start_session(start: SessionStart, request: Request) -> dict[str, UUID
 
     return {"session_id": session_id, "task_id": task_id}
 
+_MESSAGES: dict[str, type[BaseModel]] = {"hello": Hello, "ping": Ping, "clock": ClockSamples}
+
+def _server_ms() -> float:
+    return time_ns() / 1_000_000
+
+
+def _parse(message: str) -> tuple[str, BaseModel]:
+    data = json.loads(message)
+    # A control message is one key wrapping its body; a batch is sent bare.
+    if isinstance(data, dict) and len(data) == 1:
+        ((kind, body),) = data.items()
+        if kind in _MESSAGES:
+            return kind, _MESSAGES[kind].model_validate(body)
+    return "batch", Batch.model_validate(data)
+
+
+class _Refused(Exception):
+    def __init__(self, code: int, reason: str) -> None:
+        super().__init__(reason)
+        self.code = code
+        self.reason = reason
+
+
+class _TelemetrySocket:
+    def __init__(self, websocket: WebSocket) -> None:
+        self.websocket = websocket
+        self.pool = websocket.app.state.db_pool
+        self.locks: SessionLocks = websocket.app.state.telemetry_session_locks
+        self.session_id: UUID | None = None
+        # One offset per page load, so every batch uses the offset of its own load_seq.
+        self.offsets: dict[int, float] = {}
+
+    async def handle(self, message: str, received_ms: float) -> None:
+        try:
+            kind, body = _parse(message)
+        except ValueError as exc:
+            # include_input=False keeps pasted text out of the logs.
+            detail = (
+                exc.errors(include_input=False, include_url=False)
+                if isinstance(exc, ValidationError)
+                else str(exc)
+            )
+            logger.warning("Refused telemetry message: %s", detail)
+            raise _Refused(status.WS_1008_POLICY_VIOLATION, "invalid message") from exc
+
+        if kind == "hello":
+            self.hello(body)
+            return
+        if self.session_id is None:
+            raise _Refused(status.WS_1008_POLICY_VIOLATION, "hello first")
+
+        try:
+            if kind == "ping":
+                await self.pong(body, received_ms)
+            elif kind == "clock":
+                await self.clock(body)
+            else:
+                await self.batch(body)
+        except UnknownSession as exc:
+            raise _Refused(status.WS_1008_POLICY_VIOLATION, "unknown session") from exc
+        except NotSessionOwner as exc:
+            raise _Refused(SESSION_OPEN_ELSEWHERE, "session open elsewhere") from exc
+        except _STORE_ERRORS as exc:
+            logger.exception("Could not store telemetry for session %s", self.session_id)
+            raise _Refused(status.WS_1011_INTERNAL_ERROR, "not stored") from exc
+
+    def hello(self, hello: Hello) -> None:
+        if self.session_id is not None:
+            raise _Refused(status.WS_1008_POLICY_VIOLATION, "hello already sent")
+        if not self.locks.take(hello.session_id, self.websocket):
+            raise _Refused(SESSION_OPEN_ELSEWHERE, "session open elsewhere")
+        self.session_id = hello.session_id
+
+    async def pong(self, ping: Ping, received_ms: float) -> None:
+        await self.websocket.send_json(
+            {"pong": {"t0": ping.t0, "t1": received_ms, "t2": _server_ms()}}
+        )
+
+    async def clock(self, clock: ClockSamples) -> None:
+        async with self.pool.acquire() as connection:
+            load_seq, offset = await store_clock_samples(
+                connection, self.locks, self.session_id, self.websocket, clock.samples
+            )
+        self.offsets[load_seq] = offset
+        await self.websocket.send_json({"ready": {"load_seq": load_seq}})
+
+    async def batch(self, batch: Batch) -> None:
+        if not self.locks.owns(batch.session_id, self.websocket):
+            raise NotSessionOwner
+
+        async with self.pool.acquire() as connection:
+            offset = self.offsets.get(batch.load_seq)
+            if offset is None:
+                offset = await stored_offset(connection, batch.session_id, batch.load_seq)
+            if offset is None:
+                raise _Refused(
+                    status.WS_1008_POLICY_VIOLATION, "no clock handshake for this page load"
+                )
+            self.offsets[batch.load_seq] = offset
+
+            await store_batch(connection, batch, offset)
+            up_to = await acked_up_to(connection, batch.session_id, batch.load_seq)
+
+        if up_to >= 0:
+            await self.websocket.send_json(
+                {"ack": {"load_seq": batch.load_seq, "up_to_batch_seq": up_to}}
+            )
+
+    def release(self) -> None:
+        if self.session_id is not None:
+            self.locks.release(self.session_id, self.websocket)
+
+
 @router.websocket("/ws/telemetry")
 async def telemetry(websocket: WebSocket) -> None:
     await websocket.accept()
-    pool = websocket.app.state.db_pool
+    socket = _TelemetrySocket(websocket)
 
     try:
         while True:
             message = await websocket.receive_text()
-
+            # Read first: anything done before this line adds error to the pong's t1.
+            received_ms = _server_ms()
             try:
-                batch = Batch.model_validate_json(message)
-            except ValidationError as exc:
-                # include_input=False keeps pasted text out of the logs.
-                logger.warning(
-                    "Refused telemetry batch: %s",
-                    exc.errors(include_input=False, include_url=False),
-                )
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="invalid batch")
+                await socket.handle(message, received_ms)
+            except _Refused as refused:
+                logger.warning("Closed telemetry connection: %s", refused.reason)
+                await websocket.close(code=refused.code, reason=refused.reason)
                 return
-
-            try:
-                async with pool.acquire() as connection:
-                    # Zero until the Step 5 clock handshake gives a real offset.
-                    await store_batch(connection, batch, offset_ms=0.0)
-                    up_to = await acked_up_to(connection, batch.session_id, batch.load_seq)
-            except asyncpg.ForeignKeyViolationError:
-                logger.warning("Refused telemetry batch for unknown session %s", batch.session_id)
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="unknown session")
-                return
-            except _STORE_ERRORS:
-                logger.exception(
-                    "Could not store batch %s of session %s", batch.batch_seq, batch.session_id
-                )
-                await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="batch not stored")
-                return
-
-            if up_to >= 0:
-                await websocket.send_json(
-                    {"ack": {"load_seq": batch.load_seq, "up_to_batch_seq": up_to}}
-                )
     except WebSocketDisconnect:
         pass
+    finally:
+        socket.release()
+

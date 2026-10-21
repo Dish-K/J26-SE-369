@@ -467,3 +467,7 @@ h1, h2, h3, p { margin-top: 0; }
   .button, .header-login { transition: none; }
   .button:hover { transform: none; }
 }
+
+.editor-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; margin: 0 0 16px; font-weight: 700; }
+
+button.button { border: 0; font-family: inherit; cursor: pointer; }
