@@ -8,6 +8,7 @@ import pytest
 from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from datetime import UTC, datetime, timedelta
 
 from backend.app.db.pool import close_db_pool, create_db_pool
 from backend.app.main import app
@@ -353,3 +354,77 @@ def test_a_bad_session_start_is_refused(database, bad):
     with TestClient(app) as client:
         response = client.post("/telemetry/sessions", json=_SESSION_START | bad)
     assert response.status_code == 422
+
+
+def test_a_message_before_hello_is_refused(database):
+    assert _close_code('{"ping": {"t0": 1.0}}') == 1008
+
+
+def test_a_batch_before_the_clock_handshake_is_refused(session):
+    with TestClient(app) as client, client.websocket_connect("/ws/telemetry") as websocket:
+        websocket.send_json({"hello": {"session_id": str(session)}})
+        websocket.send_text(_batch(_key(0, 1.0), session=session).model_dump_json())
+        with pytest.raises(WebSocketDisconnect) as closed:
+            websocket.receive_json()
+    assert closed.value.code == 1008
+
+
+def test_a_second_tab_is_refused_until_the_first_one_closes(session):
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/telemetry") as first:
+            first.send_json({"hello": {"session_id": str(session)}})
+            # A round trip proves the first hello was handled before the second tab arrives.
+            first.send_json({"ping": {"t0": 1.0}})
+            first.receive_json()
+
+            with client.websocket_connect("/ws/telemetry") as second:
+                second.send_json({"hello": {"session_id": str(session)}})
+                with pytest.raises(WebSocketDisconnect) as closed:
+                    second.receive_json()
+            assert closed.value.code == 4409
+
+        with client.websocket_connect("/ws/telemetry") as third:
+            assert _handshake(third, session) == 0
+
+
+def test_a_reload_starts_a_new_page_load_in_the_same_session(session):
+    old_page = _Page(loaded_ms_ago=60_000)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/telemetry") as websocket:
+            assert _handshake(websocket, session, old_page) == 0
+            batch = _batch(_key(0, old_page.now()), _key(1, old_page.now(), kind=1), session=session)
+            websocket.send_text(batch.model_dump_json())
+            assert websocket.receive_json() == _ack(0)
+
+        # The reload: a new connection, and a browser clock that starts again near 0.
+        new_page = _Page()
+        with client.websocket_connect("/ws/telemetry") as websocket:
+            assert _handshake(websocket, session, new_page) == 1
+            batch = _batch(
+                _key(0, new_page.now()), _key(1, new_page.now(), kind=1), session=session, load_seq=1
+            )
+            websocket.send_text(batch.model_dump_json())
+            assert websocket.receive_json() == _ack(0, load_seq=1)
+
+    rows = _sql(
+        "SELECT load_seq, batch_seq, perf_now, gap_ms, time FROM events "
+        "WHERE session_id = $1 ORDER BY load_seq, batch_seq, seq_in_batch",
+        session,
+    )
+    assert [(row["load_seq"], row["batch_seq"]) for row in rows] == [(0, 0), (0, 0), (1, 0), (1, 0)]
+
+    last_before, first_after = rows[1], rows[2]
+    assert first_after["gap_ms"] is None
+    assert first_after["perf_now"] < last_before["perf_now"]
+    assert first_after["time"] > last_before["time"]
+    assert abs(first_after["time"] - datetime.now(UTC)) < timedelta(minutes=1)
+
+    samples = _sql(
+        "SELECT load_seq, count(*) AS stored, count(*) FILTER (WHERE accepted) AS used "
+        "FROM clock_sync_samples WHERE session_id = $1 GROUP BY load_seq ORDER BY load_seq",
+        session,
+    )
+    assert [(row["load_seq"], row["stored"], row["used"]) for row in samples] == [
+        (0, HANDSHAKE_SAMPLES, HANDSHAKE_SAMPLES // 2),
+        (1, HANDSHAKE_SAMPLES, HANDSHAKE_SAMPLES // 2),
+    ]
