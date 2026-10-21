@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from statistics import median
 
+# Pings per page load; the faster half of them sets the offset.
+HANDSHAKE_SAMPLES = 8
+
 @dataclass(frozen=True)
 class ClockSample:
     t0: float  # browser clock when the ping left

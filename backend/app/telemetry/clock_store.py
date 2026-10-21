@@ -1,11 +1,15 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from threading import Lock
 from uuid import UUID
 
 import asyncpg
 
-from backend.app.telemetry.clock import ClockSample, accepted, segment_offset
-
+from backend.app.telemetry.clock import (
+    HANDSHAKE_SAMPLES,
+    ClockSample,
+    accepted,
+    segment_offset,
+)
 
 class SessionLocks:
     def __init__(self) -> None:
@@ -33,6 +37,11 @@ class UnknownSession(Exception):
     pass
 
 
+# An OSError, which the endpoint treats as "database down".
+class NotSessionOwner(Exception):
+    pass
+
+
 _NEXT_LOAD_SEQ = """
 SELECT GREATEST(
   COALESCE((SELECT max(load_seq) FROM clock_sync_samples WHERE session_id = $1), -1),
@@ -52,14 +61,13 @@ async def store_clock_samples(
     locks: SessionLocks,
     session_id: UUID,
     owner: object,
-    observations: list[tuple[datetime, ClockSample]],
+    samples: list[ClockSample],
 ) -> tuple[int, float]:
-    if len(observations) != 8:
-        raise ValueError("a handshake requires eight clock samples")
+    if len(samples) != HANDSHAKE_SAMPLES:
+        raise ValueError(f"a handshake requires {HANDSHAKE_SAMPLES} clock samples")
     if not locks.owns(session_id, owner):
-        raise PermissionError("connection does not own this session")
+        raise NotSessionOwner
 
-    samples = [sample for _, sample in observations]
     flags = accepted(samples)
     offset_ms = segment_offset(samples)
 
@@ -80,11 +88,13 @@ async def store_clock_samples(
             _INSERT_SAMPLE,
             [
                 (
-                    when, session_id, load_seq,
+                    # t1 is the server clock when the ping arrived.
+                    datetime.fromtimestamp(sample.t1 / 1000, tz=UTC),
+                    session_id, load_seq,
                     sample.t0, sample.t1, sample.t2, sample.t3,
                     sample.rtt_ms, sample.offset_ms, keep,
                 )
-                for (when, sample), keep in zip(observations, flags)
+                for sample, keep in zip(samples, flags)
             ],
         )
         await connection.execute(

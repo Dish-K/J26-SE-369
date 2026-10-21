@@ -1,29 +1,32 @@
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 
 from backend.app.db.pool import close_db_pool, create_db_pool
-from backend.app.telemetry.clock import ClockSample
-from backend.app.telemetry.clock_store import SessionLocks, store_clock_samples
+from backend.app.telemetry.clock import HANDSHAKE_SAMPLES, ClockSample
+from backend.app.telemetry.clock_store import (
+    NotSessionOwner,
+    SessionLocks,
+    store_clock_samples,
+)
+
+# A realistic server clock reading, in milliseconds since 1970.
+SERVER_MS = 1_760_000_000_000.0
 
 
-def _observations(offset_shift=0):
-    base = datetime.now(UTC)
+def _samples(shift=0):
     round_trips = (1, 2, 3, 4, 50, 60, 70, 80)
     offsets = (100, 102, 104, 106, 5000, -5000, 9000, 0)
     return [
-        (
-            base + timedelta(milliseconds=index),
-            ClockSample(
-                t0=0.0,
-                t1=offset + offset_shift + rtt / 2,
-                t2=offset + offset_shift + rtt / 2,
-                t3=float(rtt),
-            ),
+        ClockSample(
+            t0=0.0,
+            t1=SERVER_MS + offset + shift + rtt / 2,
+            t2=SERVER_MS + offset + shift + rtt / 2,
+            t3=float(rtt),
         )
-        for index, (rtt, offset) in enumerate(zip(round_trips, offsets))
+        for rtt, offset in zip(round_trips, offsets)
     ]
 
 
@@ -41,6 +44,14 @@ def test_only_the_owner_can_release_a_session():
 
     locks.release(session, first)
     assert locks.take(session, second)
+
+
+def test_a_handshake_needs_exactly_the_agreed_number_of_samples():
+    # Refused before the database is touched, so no connection is needed.
+    with pytest.raises(ValueError):
+        asyncio.run(
+            store_clock_samples(None, SessionLocks(), uuid4(), object(), _samples()[:-1])
+        )
 
 
 @pytest.fixture
@@ -79,39 +90,46 @@ def test_samples_and_next_page_load_are_saved_together(database):
                         session,
                     )
 
-                    with pytest.raises(PermissionError):
-                        await store_clock_samples(
-                            connection, locks, session, first, _observations()
-                        )
+                    with pytest.raises(NotSessionOwner):
+                        await store_clock_samples(connection, locks, session, first, _samples())
 
                     assert locks.take(session, first)
                     load_seq, offset = await store_clock_samples(
-                        connection, locks, session, first, _observations()
+                        connection, locks, session, first, _samples()
                     )
-                    assert (load_seq, offset) == (1, 103)
+                    assert (load_seq, offset) == (1, SERVER_MS + 103)
+
+                    # A second tab cannot store while the first one owns the session.
+                    with pytest.raises(NotSessionOwner):
+                        await store_clock_samples(connection, locks, session, second, _samples())
 
                     locks.release(session, first)
                     assert locks.take(session, second)
                     load_seq, offset = await store_clock_samples(
-                        connection, locks, session, second, _observations(200)
+                        connection, locks, session, second, _samples(200)
                     )
-                    assert (load_seq, offset) == (2, 303)
+                    assert (load_seq, offset) == (2, SERVER_MS + 303)
 
                     rows = await connection.fetch(
-                        "SELECT load_seq, accepted FROM clock_sync_samples "
-                        "WHERE session_id = $1 ORDER BY load_seq, time",
+                        "SELECT load_seq, accepted, time, t1 FROM clock_sync_samples "
+                        "WHERE session_id = $1 ORDER BY load_seq, rtt_ms",
                         session,
                     )
+                    assert len(rows) == 2 * HANDSHAKE_SAMPLES
                     assert [(row["load_seq"], row["accepted"]) for row in rows] == (
                         [(1, True)] * 4
                         + [(1, False)] * 4
                         + [(2, True)] * 4
                         + [(2, False)] * 4
                     )
+                    assert all(
+                        row["time"] == datetime.fromtimestamp(row["t1"] / 1000, tz=UTC)
+                        for row in rows
+                    )
                     assert await connection.fetchval(
                         "SELECT final_offset_ms FROM sessions WHERE session_id = $1",
                         session,
-                    ) == 303
+                    ) == SERVER_MS + 303
                 finally:
                     await connection.execute(
                         "DELETE FROM clock_sync_samples WHERE session_id = $1", session
