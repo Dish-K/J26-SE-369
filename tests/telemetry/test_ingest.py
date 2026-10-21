@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -10,6 +11,7 @@ from pydantic import ValidationError
 
 from backend.app.db.pool import close_db_pool, create_db_pool
 from backend.app.main import app
+from backend.app.telemetry.clock import HANDSHAKE_SAMPLES
 from backend.app.telemetry.ingest import EVENT_COLUMNS, Batch, event_rows
 from backend.app.telemetry.router import acked_up_to, store_batch
 
@@ -18,9 +20,9 @@ TASK = uuid4()
 OTHER_TASK = uuid4()
 
 
-def _batch(*events, batch_seq=0, session=SESSION):
+def _batch(*events, batch_seq=0, session=SESSION, load_seq=0):
     return Batch.model_validate(
-        {"session_id": str(session), "load_seq": 0, "batch_seq": batch_seq, "events": list(events)}
+        {"session_id": str(session), "load_seq": load_seq, "batch_seq": batch_seq, "events": list(events)}
     )
 
 
@@ -100,7 +102,7 @@ _NEW_SESSION = (
     "VALUES ($1, $2, 'python', now())"
 )
 # sessions last: the other tables point to it.
-_SESSION_TABLES = ("events", "ingested_batches", "tasks", "sessions")
+_SESSION_TABLES = ("events", "ingested_batches", "clock_sync_samples", "tasks", "sessions")
 
 
 # Each test gets its own session row and removes its rows afterwards, even on failure.
@@ -211,12 +213,36 @@ def session(database):
         _sql(f"DELETE FROM {table} WHERE session_id = $1", session_id)
 
 
-def _ack(up_to):
-    return {"ack": {"load_seq": 0, "up_to_batch_seq": up_to}}
+def _ack(up_to, load_seq=0):
+    return {"ack": {"load_seq": load_seq, "up_to_batch_seq": up_to}}
 
 
-def _close_code(message):
+class _Page:
+    # One page load's browser clock: milliseconds since that page loaded.
+    def __init__(self, loaded_ms_ago=0.0):
+        self.start = time.perf_counter() * 1000 - loaded_ms_ago
+
+    def now(self):
+        return time.perf_counter() * 1000 - self.start
+
+
+# What the browser does on connect: hello, the timed pings, then all samples in one message.
+def _handshake(websocket, session, page=None):
+    page = page or _Page()
+    websocket.send_json({"hello": {"session_id": str(session)}})
+    samples = []
+    for _ in range(HANDSHAKE_SAMPLES):
+        websocket.send_json({"ping": {"t0": page.now()}})
+        pong = websocket.receive_json()["pong"]
+        samples.append({**pong, "t3": page.now()})
+    websocket.send_json({"clock": {"samples": samples}})
+    return websocket.receive_json()["ready"]["load_seq"]
+
+
+def _close_code(message, session=None):
     with TestClient(app) as client, client.websocket_connect("/ws/telemetry") as websocket:
+        if session is not None:
+            _handshake(websocket, session)
         websocket.send_text(message)
         with pytest.raises(WebSocketDisconnect) as closed:
             websocket.receive_json()
@@ -226,6 +252,7 @@ def _close_code(message):
 def test_the_endpoint_acks_a_resent_batch_without_storing_it_again(session):
     batch = _batch(_key(0, 1.0), session=session).model_dump_json()
     with TestClient(app) as client, client.websocket_connect("/ws/telemetry") as websocket:
+        assert _handshake(websocket, session) == 0
         websocket.send_text(batch)
         assert websocket.receive_json() == _ack(0)
         websocket.send_text(batch)
@@ -236,6 +263,7 @@ def test_the_endpoint_acks_a_resent_batch_without_storing_it_again(session):
 
 def test_the_endpoint_never_acks_past_a_missing_batch(session):
     with TestClient(app) as client, client.websocket_connect("/ws/telemetry") as websocket:
+        _handshake(websocket, session)
         for batch_seq, up_to in ((0, 0), (2, 0), (1, 2)):
             batch = _batch(_key(0, float(batch_seq)), batch_seq=batch_seq, session=session)
             websocket.send_text(batch.model_dump_json())
@@ -246,14 +274,19 @@ def test_an_invalid_batch_closes_the_connection(database):
     assert _close_code('{"events": []}') == 1008
 
 
-def test_a_batch_for_an_unknown_session_closes_the_connection(database):
-    assert _close_code(_batch(_key(0, 1.0), session=uuid4()).model_dump_json()) == 1008
+def test_a_handshake_for_an_unknown_session_closes_the_connection(database):
+    with TestClient(app) as client, client.websocket_connect("/ws/telemetry") as websocket:
+        with pytest.raises(WebSocketDisconnect) as closed:
+            _handshake(websocket, uuid4())
+    assert closed.value.code == 1008
 
 
 # modifiers breaks a CHECK; key_class is too big for SMALLINT and fails inside COPY.
 @pytest.mark.parametrize("bad", [{"modifiers": 99}, {"key_class": 70_000}])
 def test_a_batch_the_database_rejects_closes_the_connection(session, bad):
-    assert _close_code(_batch(_key(0, 1.0) | bad, session=session).model_dump_json()) == 1011
+    message = _batch(_key(0, 1.0) | bad, session=session).model_dump_json()
+    assert _close_code(message, session) == 1011
+
 
 _SESSION_START = {
     "editor_profile": "research-v1",
@@ -307,6 +340,7 @@ def test_a_started_session_accepts_keystrokes(started):
         ids = _start(client, started)
         batch = _batch(_key(0, 1.0, task=ids["task_id"]), session=ids["session_id"])
         with client.websocket_connect("/ws/telemetry") as websocket:
+            assert _handshake(websocket, ids["session_id"]) == 0            
             websocket.send_text(batch.model_dump_json())
             assert websocket.receive_json() == _ack(0)
 

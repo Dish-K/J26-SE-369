@@ -10,10 +10,13 @@ from backend.app.db.pool import (
 )
 from backend.app.telemetry.router import router as telemetry_router
 
+from backend.app.telemetry.clock_store import SessionLocks
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await create_db_pool()
     app.state.db_pool = pool
+    app.state.telemetry_session_locks = SessionLocks()
 
     try:
         yield

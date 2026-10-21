@@ -104,3 +104,15 @@ async def store_clock_samples(
         )
 
     return load_seq, offset_ms
+
+# The same median as segment_offset, for a page load an earlier connection measured.
+_STORED_OFFSET = """
+SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY offset_ms)
+FROM clock_sync_samples
+WHERE session_id = $1 AND load_seq = $2 AND accepted
+"""
+
+async def stored_offset(
+    connection: asyncpg.Connection, session_id: UUID, load_seq: int
+) -> float | None:
+    return await connection.fetchval(_STORED_OFFSET, session_id, load_seq)
