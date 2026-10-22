@@ -3,84 +3,213 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>C3 Adaptive Probing demo</title>
+<title>Adaptive probing | CodeTrace</title>
 <style>
+  /* Colours, type and hard-edged cards follow the CodeTrace frontend (frontend/app/globals.css). */
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2329; --muted: #5d6874; --line: #d9dee4;
-    --accent: #1f5fbf; --warn-bg: #fff4d6; --warn-text: #6b4a00; --ok-bg: #e2f4e6; --ok-text: #14532d;
-    --bad-bg: #fde4e4; --bad-text: #7a1f1f; --info-bg: #e5eefb; --info-text: #17407f; --code-bg: #f0f2f5;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #14181d; --panel: #1c2128; --text: #e6e9ed; --muted: #9aa5b1; --line: #313a45;
-      --accent: #6aa3f5; --warn-bg: #3a3012; --warn-text: #f3d98b; --ok-bg: #12331e; --ok-text: #9be3b0;
-      --bad-bg: #3d1a1a; --bad-text: #f2a9a9; --info-bg: #14284a; --info-text: #a9c8f5; --code-bg: #12161b;
-    }
+    --color-bg: #f3f2f2; --color-surface: #eae9e9; --color-paper: #f8f4f4; --color-text: #201e1d;
+    --color-muted: #605d5d; --color-accent: #ec3013; --color-accent-dark: #ae1800; --color-line: #bab6b6;
+    --color-soft: #ffe0d9; --color-shadow: #d7d3d3;
+    --font-body: Archivo, Arial, sans-serif; --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
-  header, main { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
-  header { padding-top: 20px; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 0 0 8px; }
-  p.sub { margin: 0 0 12px; color: var(--muted); }
-  .banners { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-  .banner { padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--warn-bg); color: var(--warn-text); }
-  .grid { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; padding-bottom: 40px; }
-  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 16px; }
-  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 5px 12px; border-radius: 6px; }
-  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  button:disabled { opacity: 0.5; cursor: default; }
-  button.seg { display: block; width: 100%; text-align: left; margin-bottom: 8px; }
-  button.seg[aria-pressed="true"] { border-color: var(--accent); outline: 2px solid var(--accent); }
-  pre { background: var(--code-bg); border-radius: 6px; padding: 10px; overflow-x: auto; margin: 8px 0; font: 13px/1.45 ui-monospace, Consolas, monospace; white-space: pre; }
-  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; margin-right: 6px; background: var(--info-bg); color: var(--info-text); }
-  .chip.supported { background: var(--ok-bg); color: var(--ok-text); }
-  .chip.doubtful { background: var(--bad-bg); color: var(--bad-text); }
-  .chip.unchecked, .chip.rule_only { background: var(--warn-bg); color: var(--warn-text); }
-  .tag { border-top: 1px solid var(--line); padding: 10px 0; }
-  .tag:first-of-type { border-top: 0; }
-  .muted { color: var(--muted); font-size: 13px; }
-  .levels { display: flex; gap: 6px; margin: 8px 0; }
-  .levels button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .unverified { background: var(--warn-bg); color: var(--warn-text); padding: 6px 10px; border-radius: 6px; font-weight: 600; margin: 8px 0; }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  td, th { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; font-family: ui-monospace, Consolas, monospace; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
-  input[type=text] { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); }
-  .review { margin-top: 8px; }
-  .error { color: var(--bad-text); background: var(--bad-bg); padding: 6px 10px; border-radius: 6px; margin: 8px 0; }
+  body { margin: 0; min-width: 320px; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body); -webkit-font-smoothing: antialiased; line-height: 1.5; }
+  h1, h2, h3, p { margin-top: 0; }
+  ::selection { background: #ff9783; color: var(--color-text); }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+  .page-gutter { padding-inline: clamp(18px, 5.25vw, 88px); }
+  .eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 600; line-height: 1.5; letter-spacing: .1em; text-transform: uppercase; }
+  .muted { color: var(--color-muted); font-size: 14px; }
+  .wordmark { display: inline-flex; align-items: baseline; white-space: nowrap; font-size: 25px; font-weight: 800; line-height: 1; letter-spacing: -.055em; }
+  .wordmark i { color: var(--color-accent); font-style: normal; }
+
+  .site-header { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 32px; min-height: 86px; border-bottom: 1px solid var(--color-text); }
+  .site-header .eyebrow { color: var(--color-muted); }
+  .banners { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+  .banner { padding: 4px 10px; background: var(--color-text); color: var(--color-paper); font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .banner.warn { background: var(--color-accent); color: #fff; }
+
+  .hero { padding-block: clamp(36px, 5vw, 68px) clamp(28px, 3vw, 44px); }
+  .hero h1 { margin: 14px 0 18px; font-size: clamp(44px, 6vw, 88px); font-weight: 800; line-height: .95; letter-spacing: -.07em; }
+  .hero h1 em { color: var(--color-accent); font-style: normal; }
+  .hero p { max-width: 640px; margin: 0; color: #444141; font-size: clamp(16px, 1.3vw, 19px); line-height: 1.55; }
+  details.legend { margin-top: 20px; max-width: 760px; font-size: 14px; color: var(--color-muted); }
+  details.legend summary { cursor: pointer; font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text); }
+  details.legend dl { margin: 10px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; }
+  details.legend dt { font-weight: 800; color: var(--color-text); }
+  details.legend dd { margin: 0; }
+
+  .block { padding-block: clamp(30px, 4vw, 56px); border-top: 2px solid var(--color-text); }
+  .block-head { display: grid; grid-template-columns: 70px 1fr; gap: 13px; margin-bottom: 22px; }
+  .block-num { padding-top: 6px; color: var(--color-accent); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+  .block-head h2 { margin: 0 0 6px; font-size: clamp(26px, 3vw, 40px); line-height: 1.08; letter-spacing: -.045em; }
+  .block-head p { margin: 0; max-width: 620px; color: var(--color-muted); font-size: 15px; }
+  .alt { background: var(--color-surface); }
+
+  .frame { border: 2px solid var(--color-text); background: var(--color-paper); box-shadow: 12px 12px 0 var(--color-shadow); }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 15px; min-height: 41px; padding-inline: 18px; background: var(--color-text); color: #f8f4f4; font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em; }
+  .toolbar .status { color: #ff9783; white-space: nowrap; }
+  .toolbar .status::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; background: var(--color-accent); vertical-align: 1px; }
+  .frame-body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 0; }
+  .frame-body > div { padding: clamp(16px, 2vw, 26px); }
+  .frame-body > div + div { border-left: 1px solid var(--color-line); }
+  .foot { padding: 10px 18px; border-top: 1px solid var(--color-line); color: var(--color-muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em; }
+
+  .code { background: var(--color-text); color: #d7d3d3; overflow-x: auto; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.5; }
+  .code-head { display: flex; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #444141; color: #bab6b6; font-size: 10px; letter-spacing: .05em; }
+  .code-lines { padding: 10px 0 14px; min-width: max-content; }
+  .line { display: grid; grid-template-columns: 38px 38px 1fr; padding-right: 16px; border-left: 3px solid transparent; white-space: pre; }
+  .line .no { color: #7d7979; text-align: right; padding-right: 10px; user-select: none; }
+  .line .tag { color: #ff9783; font-weight: 700; font-size: 10px; align-self: center; }
+  .line.flagged { background: #2e2523; border-left-color: var(--color-accent); }
+  pre { margin: 10px 0; padding: 12px 14px; background: var(--color-text); color: #d7d3d3; overflow-x: auto; font: 12.5px/1.5 var(--font-mono); white-space: pre; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 13px; background: var(--color-paper); }
+  th { text-align: left; font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--color-muted); }
+  td, th { border-bottom: 1px solid var(--color-line); padding: 6px 8px; vertical-align: top; }
+  td { font-family: var(--font-mono); font-size: 12px; }
+  tr.bad td { color: var(--color-accent-dark); }
+
+  button { font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; border: 2px solid var(--color-text); background: transparent; color: var(--color-text); padding: 9px 16px; transition: background .18s ease, color .18s ease; }
+  button:hover:not(:disabled) { background: var(--color-text); color: var(--color-paper); }
+  button.primary { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: var(--color-accent-dark); border-color: var(--color-accent-dark); color: #fff; }
+  button.dark { background: var(--color-text); color: var(--color-paper); }
+  button:disabled { opacity: .45; cursor: default; }
+  button[aria-pressed="true"] { background: var(--color-text); color: var(--color-paper); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  label.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 14px 0; }
+  input[type=text] { font: inherit; padding: 9px 10px; border: 2px solid var(--color-text); background: var(--color-paper); color: var(--color-text); min-width: 220px; }
+
+  .segs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .segs button { text-align: left; padding: 14px 16px; font-weight: 600; font-size: 13px; line-height: 1.45; background: var(--color-paper); }
+  .segs button strong { display: block; font-size: 16px; letter-spacing: -.02em; }
+  .segs button[aria-pressed="true"] { background: var(--color-text); color: var(--color-paper); box-shadow: 6px 6px 0 var(--color-shadow); }
+  .segs button .meta { font-family: var(--font-mono); font-size: 11px; opacity: .8; }
+
+  .chip { display: inline-block; padding: 2px 9px; margin: 0 6px 4px 0; border: 1px solid var(--color-text); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; background: var(--color-paper); }
+  .chip.supported { background: var(--color-text); color: var(--color-paper); }
+  .chip.doubtful { background: var(--color-soft); border-color: var(--color-accent-dark); color: var(--color-accent-dark); }
+  .chip.unchecked, .chip.rule_only { border-style: dashed; }
+
+  .note { padding: 12px 14px; margin: 12px 0; border-left: 4px solid var(--color-muted); background: var(--color-surface); font-size: 14px; }
+  .note.warn { border-left-color: var(--color-text); background: var(--color-surface); font-weight: 700; }
+  .note.bad, .error { border-left-color: var(--color-accent); background: var(--color-soft); color: #5c0e00; }
+  .error { padding: 12px 14px; margin: 12px 0; border-left: 4px solid var(--color-accent); font-weight: 700; }
+
+  .card { padding: clamp(14px, 2vw, 22px); border: 2px solid var(--color-text); background: var(--color-paper); margin-bottom: 18px; }
+  .card h3 { margin: 0 0 8px; font-size: 20px; letter-spacing: -.035em; }
+  .tagrow { padding: 14px 0; border-top: 1px solid var(--color-line); }
+  .tagrow:first-of-type { border-top: 0; padding-top: 0; }
+  .levels { display: flex; gap: 8px; margin: 10px 0; }
+  .sub { margin: 18px 0 6px; color: var(--color-accent-dark); }
+  details summary { cursor: pointer; font-weight: 700; margin: 8px 0; }
+  .runbar { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 18px; border: 2px dashed var(--color-text); }
+  .runbar p { margin: 0; }
+
+  .site-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 30px; min-height: 90px; border-top: 1px solid var(--color-text); color: var(--color-muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .03em; text-transform: uppercase; }
+  .site-footer .wordmark { color: var(--color-text); font-family: var(--font-body); text-transform: none; font-size: 22px; }
+
+  @media (max-width: 900px) {
+    .frame-body { grid-template-columns: 1fr; }
+    .frame-body > div + div { border-left: 0; border-top: 1px solid var(--color-line); }
+    .banners { margin-left: 0; }
+  }
+  @media (max-width: 560px) {
+    .block-head { grid-template-columns: 1fr; gap: 4px; }
+    .line { grid-template-columns: 30px 28px 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { button { transition: none; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>C3 Adaptive Probing: interviewer preview</h1>
-  <p class="sub">Flagged code segment, knowledge areas, and follow-up questions to approve. Tags are evidence about the code, not about the candidate.</p>
+<header class="site-header page-gutter">
+  <span class="wordmark">CodeTrace<i>.</i></span>
+  <span class="eyebrow">C3 / Adaptive probing / Demo</span>
   <div class="banners" id="banners"></div>
 </header>
+<div class="page-gutter" id="problems"></div>
+
 <main>
-  <div class="grid">
-    <section>
-      <div class="panel">
-        <h2>Flagged segments</h2>
-        <p class="muted">Constructed demo solution; the flag confidences are invented.</p>
-        <div id="segments"></div>
+  <section class="hero page-gutter" aria-labelledby="hero-title">
+    <span class="eyebrow">Adaptive probing</span>
+    <h1 id="hero-title">A better <em>next question.</em></h1>
+    <p>C2 flags parts of a submission. C3 cuts those parts out, finds the knowledge they use, and writes follow-up questions for the interviewer. Send the mock hand-off below and watch each step run. A flag starts a conversation; it does not make the decision.</p>
+    <details class="legend">
+      <summary>What the labels on this page mean</summary>
+      <dl>
+        <dt>Demo data</dt><dd>The code and the flags are made up for this demo. No real candidate.</dd>
+        <dt>Fake model</dt><dd>Answers come from a stub, not a real model. Shown when no real model is configured.</dd>
+        <dt>Cached result</dt><dd>Answers were recorded earlier from a real model and are replayed. Nothing is called now.</dd>
+        <dt>Unverified</dt><dd>A question's tests were not run. This is the default for every question.</dd>
+        <dt>Reference-checked</dt><dd>The model's own reference solution reproduced the model's own expected values in a sandbox. Both came from the same model, so this is not proof the question is right.</dd>
+        <dt>Advisory</dt><dd>The reviewer's opinion. It never approves anything.</dd>
+      </dl>
+    </details>
+  </section>
+
+  <section class="block page-gutter alt" aria-labelledby="h-handoff">
+    <div class="block-head">
+      <span class="block-num">01</span>
+      <div><h2 id="h-handoff">Hand-off from C2</h2><p>This is the shape C3 reads from the database: the task's flags with their final line numbers, and the submitted file. Here it is a mock.</p></div>
+    </div>
+    <div class="frame">
+      <div class="toolbar"><span>C2 → C3 / HAND-OFF</span><span class="status">MOCK INPUT</span></div>
+      <div class="frame-body">
+        <div>
+          <div class="code">
+            <div class="code-head"><span>solution.py</span><span>PYTHON</span></div>
+            <div class="code-lines" id="hcode" aria-label="Submitted code with flagged lines marked"></div>
+          </div>
+        </div>
+        <div>
+          <p class="eyebrow">Flags from C2</p>
+          <table id="hflags"></table>
+          <label class="check"><input type="checkbox" id="badflag"> <span>Also send a bad flag (lines 90 to 95, outside the file) to see that C3 rejects it with a reason and carries on.</span></label>
+          <div class="row"><button class="primary" id="send">Send to C3 ↗</button><span class="muted" id="sendnote"></span></div>
+        </div>
       </div>
-      <div class="panel">
-        <h2>Interviewer</h2>
-        <input type="text" id="who" placeholder="Your name" maxlength="60" aria-label="Your name">
-        <p class="muted">Approving a probe records that you read it. It does not mean it was tested.</p>
-      </div>
-    </section>
-    <section id="detail"></section>
-  </div>
-  <div class="panel" id="example" hidden></div>
+      <div class="foot" id="hsource"></div>
+    </div>
+  </section>
+
+  <section class="block page-gutter" id="extraction" aria-labelledby="h-extract" hidden>
+    <div class="block-head">
+      <span class="block-num">02</span>
+      <div><h2 id="h-extract">Segment Extraction</h2><p>Each flag becomes a complete piece of code, cut at function and statement boundaries. Touching flags are merged. A flag that cannot be used is rejected with a reason and never stops the task.</p></div>
+    </div>
+    <div class="segs" id="segments"></div>
+    <div id="rejected"></div>
+  </section>
+
+  <section class="block page-gutter alt" id="detailblock" aria-labelledby="h-detail" hidden>
+    <div class="block-head">
+      <span class="block-num">03</span>
+      <div><h2 id="h-detail">Knowledge, questions and checks</h2><p>Pick a segment above, run the stages one by one, or run them all. Tags are evidence about the code, not about the candidate.</p></div>
+    </div>
+    <div id="detail"></div>
+  </section>
+
+  <section class="block page-gutter" id="exampleblock" aria-labelledby="h-example" hidden>
+    <div class="block-head">
+      <span class="block-num">04</span>
+      <div><h2 id="h-example">Why the reference check exists</h2><p>A question that passed every static check but has a wrong expected value. The reference check catches it, and approval is disabled for it.</p></div>
+    </div>
+    <div id="example"></div>
+  </section>
 </main>
+
+<footer class="site-footer page-gutter">
+  <span class="wordmark">CodeTrace<i>.</i></span>
+  <span>Adaptive probing demo</span>
+  <span>Research project · J26-SE-369</span>
+</footer>
+
 <script>
 (function () {
   "use strict";
-  var state = null, selected = null, detail = null, level = {};
+  var state = null, hand = null, extraction = null, selected = null, detail = null;
+  var level = {}, refNote = {}, runNotes = {};
   var $ = function (id) { return document.getElementById(id); };
 
   function el(tag, props, children) {
@@ -93,6 +222,8 @@
   }
   function pre(text) { return el("pre", { text: text }); }
   function chip(text, cls) { return el("span", { "class": "chip " + (cls || ""), text: text }); }
+  function sub(text) { return el("p", { "class": "eyebrow sub", text: text }); }
+  function note(text, cls) { return el("div", { "class": "note " + (cls || ""), text: text }); }
 
   function api(path, method, body) {
     var opts = { method: method || "GET", headers: {} };
@@ -106,64 +237,198 @@
   }
   function showError(e) {
     var box = el("div", { "class": "error", role: "alert", text: String(e.message || e) });
-    $("detail").insertBefore(box, $("detail").firstChild);
+    var target = $("detail").childNodes.length ? $("detail") : $("hsource").parentNode;
+    target.insertBefore(box, target.firstChild);
   }
+
+  // --- header -------------------------------------------------------------------------------
 
   function renderBanners() {
     var box = $("banners"); box.textContent = "";
     var names = state.banners.slice();
     if (detail && detail.mapper && detail.mapper.provenance.cache_hit && names.indexOf("Cached result") < 0) names.push("Cached result");
-    names.forEach(function (b) { box.appendChild(el("span", { "class": "banner", text: b })); });
+    names.forEach(function (b) { box.appendChild(el("span", { "class": "banner" + (b === "Fake model" || b === "Live model" ? " warn" : ""), text: b })); });
+    var problems = $("problems"); problems.textContent = "";
+    (state.problems || []).forEach(function (t) { problems.appendChild(el("div", { "class": "error", role: "alert", text: t })); });
   }
 
-  function renderSegments() {
+  // --- 01 hand-off --------------------------------------------------------------------------
+
+  function flagLabel(id) {
+    var i = hand.flags.map(function (f) { return f.flag_id; }).indexOf(id);
+    return i < 0 ? "?" : "F" + (i + 1);
+  }
+
+  function renderHandoff() {
+    var lines = hand.code.split("\n");
+    if (lines.length && lines[lines.length - 1] === "") lines.pop();
+    var firstOf = {};
+    hand.flags.forEach(function (f, i) { if (f.start_line <= lines.length) firstOf[f.start_line] = (firstOf[f.start_line] ? firstOf[f.start_line] + " " : "") + "F" + (i + 1); });
+    var box = $("hcode"); box.textContent = "";
+    lines.forEach(function (text, i) {
+      var n = i + 1;
+      var flagged = hand.flags.some(function (f) { return n >= f.start_line && n <= f.end_line; });
+      box.appendChild(el("div", { "class": "line" + (flagged ? " flagged" : "") }, [
+        el("span", { "class": "no", text: String(n) }),
+        el("span", { "class": "tag", text: firstOf[n] || "" }),
+        el("span", { text: text }),
+      ]));
+    });
+    var table = $("hflags"); table.textContent = "";
+    table.appendChild(el("tr", {}, ["Flag", "Lines", "Conf.", "Category"].map(function (h) { return el("th", { text: h }); })));
+    hand.flags.forEach(function (f, i) {
+      var outside = f.start_line > lines.length;
+      table.appendChild(el("tr", { "class": outside ? "bad" : "" }, [
+        el("td", { text: "F" + (i + 1) }),
+        el("td", { text: f.start_line + "-" + f.end_line }),
+        el("td", { text: f.confidence.toFixed(2) }),
+        el("td", { text: f.category + (outside ? " (outside the file)" : "") }),
+      ]));
+    });
+    $("hsource").textContent = hand.source + " · task " + hand.task_id.slice(0, 8) + " · flag model " + hand.flags[0].model_version;
+  }
+
+  function loadHandoff() {
+    return api("/api/handoff?include_bad_flag=" + ($("badflag").checked ? "true" : "false")).then(function (h) { hand = h; renderHandoff(); });
+  }
+
+  function send() {
+    var b = $("send"); b.disabled = true; b.textContent = "Sending...";
+    api("/api/handoff/send", "POST", { include_bad_flag: $("badflag").checked }).then(function (x) {
+      extraction = x;
+      return api("/api/state");
+    }).then(function (s) {
+      state = s;
+      $("sendnote").textContent = "C3 received " + hand.flags.length + " flags and produced " + extraction.segments.length + " segment(s).";
+      renderExtraction();
+      $("extraction").hidden = false; $("detailblock").hidden = false;
+      if (!selected || !state.segments.some(function (x) { return x.segment_id === selected; })) {
+        if (state.segments.length) return select(state.segments[0].segment_id);
+      } else { return select(selected); }
+    }).catch(showError).then(function () { b.disabled = false; b.textContent = "Send again ↗"; });
+  }
+
+  // --- 02 segments --------------------------------------------------------------------------
+
+  function renderExtraction() {
     var box = $("segments"); box.textContent = "";
-    state.segments.forEach(function (s) {
-      var label = "Lines " + s.start_line + "-" + s.end_line + "  (flag confidence " + s.flag_confidence + ")" + (s.mapped ? "  mapped" : "");
-      var b = el("button", { "class": "seg", "aria-pressed": String(selected === s.segment_id), text: label });
+    extraction.segments.forEach(function (s) {
+      var flags = s.flag_ids.map(flagLabel).join(" + ");
+      var meta = "from " + flags + (s.entry_function ? " · function " + s.entry_function + (s.entry_uncertain ? " (uncertain)" : "") : "");
+      var b = el("button", { "aria-pressed": String(selected === s.segment_id) }, [
+        el("strong", { text: "Lines " + s.start_line + "-" + s.end_line }),
+        el("span", { "class": "meta", text: meta }),
+      ]);
       b.onclick = function () { select(s.segment_id); };
       box.appendChild(b);
+    });
+    var rej = $("rejected"); rej.textContent = "";
+    extraction.rejected.forEach(function (r) {
+      rej.appendChild(note("Rejected " + flagLabel(r.flag_id) + ": " + r.reason.replace(/_/g, " ") + ". " + r.detail.replace(/\.?\s*$/, ".") + " The other flags carried on.", "bad"));
+    });
+    extraction.notes.forEach(function (n) {
+      rej.appendChild(note("Note: " + n.kind.replace(/_/g, " ") + " (" + n.flag_ids.map(flagLabel).join(", ") + ")."));
     });
   }
 
   function select(id) {
     selected = id;
-    api("/api/segments/" + id).then(function (d) { detail = d; render(); }).catch(showError);
+    return api("/api/segments/" + id).then(function (d) { detail = d; render(); }).catch(showError);
   }
 
+  // --- 03 detail ----------------------------------------------------------------------------
+
   function render() {
-    renderSegments(); renderBanners();
+    renderBanners();
+    if (extraction) renderExtraction();
     var seg = state.segments.filter(function (s) { return s.segment_id === selected; })[0];
     var box = $("detail"); box.textContent = "";
-    if (!seg) { box.appendChild(el("p", { "class": "muted", text: "Pick a segment on the left." })); return; }
+    if (!seg) { box.appendChild(el("p", { "class": "muted", text: "Pick a segment above." })); return; }
 
-    var codePanel = el("div", { "class": "panel" }, [
-      el("h2", { text: "Segment, lines " + seg.start_line + "-" + seg.end_line }),
-      pre(seg.code),
-    ]);
-    box.appendChild(codePanel);
+    box.appendChild(renderRunBar());
+
+    var segCard = el("div", { "class": "card" }, [el("h3", { text: "The segment, lines " + seg.start_line + "-" + seg.end_line }), pre(seg.code)]);
+    box.appendChild(segCard);
 
     var m = detail.mapper;
-    var mapPanel = el("div", { "class": "panel" }, [el("h2", { text: "Knowledge areas" })]);
+    var mapCard = el("div", { "class": "card" }, [el("h3", { text: "Knowledge Mapper" })]);
     if (!m) {
-      var go = el("button", { "class": "primary", text: "Map this segment" });
+      mapCard.appendChild(el("p", { "class": "muted", text: "Chooses up to three knowledge areas the code uses, from rule cues and a model, and checks them against each other." }));
+      var go = el("button", { "class": "dark", text: "Map this segment" });
       go.onclick = function () { go.disabled = true; go.textContent = "Mapping..."; api("/api/segments/" + selected + "/map", "POST").then(refresh).catch(function (e) { go.disabled = false; go.textContent = "Map this segment"; showError(e); }); };
-      mapPanel.appendChild(go);
+      mapCard.appendChild(go);
     } else {
-      mapPanel.appendChild(el("p", { "class": "muted", text: "Overall: " + m.overall_status + ". Model: " + m.provenance.model + " (" + m.provenance.provider + "), prompt " + m.provenance.prompt_version + ", " + m.provenance.date + "." }));
-      m.notes.forEach(function (n) { mapPanel.appendChild(el("p", { "class": "muted", text: "Note: " + n })); });
-      m.ignored_strong_cues.forEach(function (i) { mapPanel.appendChild(el("p", { "class": "unverified", text: "Strong rule cue not reflected in the model's tags: " + i.cue + " points at " + i.tag_id })); });
-      m.tags.forEach(function (t) { mapPanel.appendChild(renderTag(t)); });
+      mapCard.appendChild(el("p", { "class": "muted", text: "Overall: " + m.overall_status + ". Model: " + m.provenance.model + " (" + m.provenance.provider + "), prompt " + m.provenance.prompt_version + ", " + m.provenance.date + "." }));
+      m.notes.forEach(function (n) { mapCard.appendChild(n.indexOf("rule_only") === 0 ? note("The model was not used for this segment. " + n, "bad") : note("Note: " + n)); });
+      m.ignored_strong_cues.forEach(function (i) { mapCard.appendChild(note("Strong rule cue not reflected in the model's tags: " + i.cue + " points at " + i.tag_id, "warn")); });
+      m.tags.forEach(function (t) { mapCard.appendChild(renderTag(t)); });
     }
-    box.appendChild(mapPanel);
+    box.appendChild(mapCard);
+
+    if (m) {
+      var genCard = el("div", { "class": "card" }, [el("h3", { text: "Probe Generator: follow-up questions" })]);
+      genCard.appendChild(el("p", { "class": "muted", text: "Questions come from the knowledge area only. The model never sees the candidate's code." }));
+      m.tags.forEach(function (t) { genCard.appendChild(renderLadderFor(t)); });
+      box.appendChild(genCard);
+    }
+  }
+
+  function renderRunBar() {
+    var bar = el("div", { "class": "runbar" });
+    var b = el("button", { "class": "primary", text: "Run all stages for this segment ↗" });
+    var p = el("p", { "class": "muted", id: "runnote", text: runNotes[selected] || "Maps the segment, writes the 5, 10 and 20 minute questions for the top knowledge area, then checks the reference and asks the reviewer where available." });
+    b.onclick = function () { runAll(b); };
+    bar.appendChild(b); bar.appendChild(p);
+    return bar;
+  }
+
+  function say(id, text) {
+    runNotes[id] = text;
+    var n = $("runnote"); if (n && selected === id) n.textContent = text;
+  }
+
+  function runAll(button) {
+    var id = selected, skipped = [];
+    button.disabled = true;
+    say(id, "Stage 1 of 4: Knowledge Mapper...");
+    api("/api/segments/" + id + "/map", "POST").then(function (m) {
+      if (!m.tags.length) throw new Error("The Mapper returned no knowledge area for this segment.");
+      say(id, "Stage 2 of 4: Probe Generator for " + m.tags[0].tag + "...");
+      return api("/api/segments/" + id + "/ladder/" + m.tags[0].tag_id, "POST");
+    }).then(function (ladder) {
+      say(id, "Stage 3 of 4: reference check...");
+      var chain = Promise.resolve();
+      ladder.probes.forEach(function (pr) {
+        chain = chain.then(function () { return api("/api/probes/" + pr.probe_id + "/reference-check", "POST").then(function (u) { if (!u.reference_check && skipped.indexOf("reference check") < 0) skipped.push("reference check"); }); });
+      });
+      return chain.then(function () { return ladder; });
+    }).then(function (ladder) {
+      if (!state.reviewer || !state.reviewer.enabled) { skipped.push("reviewer (switched off)"); return; }
+      say(id, "Stage 4 of 4: advisory reviewer...");
+      var chain = Promise.resolve();
+      ladder.probes.forEach(function (pr) {
+        chain = chain.then(function () { return api("/api/probes/" + pr.probe_id + "/review", "POST").catch(function () { if (skipped.indexOf("reviewer") < 0) skipped.push("reviewer"); }); });
+      });
+      return chain;
+    }).then(function () {
+      say(id, "Done." + (skipped.length ? " Not available here, left unverified: " + skipped.join(", ") + "." : "") + " Open the 5, 10 and 20 minute tabs below.");
+    }).catch(function (e) {
+      say(id, "Stopped: " + (e.message || e));
+    }).then(function () { return refresh(); });
   }
 
   function renderTag(t) {
-    var wrap = el("div", { "class": "tag" });
+    var wrap = el("div", { "class": "tagrow" });
     wrap.appendChild(el("div", {}, [chip("#" + t.rank), chip(t.status, t.status), el("strong", { text: t.tag })]));
     if (t.why) wrap.appendChild(el("p", { "class": "muted", text: t.why }));
     if (t.cues.length) wrap.appendChild(el("p", { "class": "muted", text: "Rule cues: " + t.cues.join("; ") }));
     if (t.anchor_note) wrap.appendChild(el("p", { "class": "muted", text: t.anchor_note }));
+    return wrap;
+  }
+
+  function renderLadderFor(t) {
+    var wrap = el("div", { "class": "tagrow" });
+    wrap.appendChild(el("div", {}, [el("strong", { text: t.tag })]));
     var ladder = detail.ladders[t.tag_id];
     if (!ladder) {
       var b = el("button", { text: "Generate questions (5 / 10 / 20 min)" });
@@ -186,23 +451,23 @@
       tabs.appendChild(b);
     });
     wrap.appendChild(tabs);
-    ladder.notes.forEach(function (n) { wrap.appendChild(el("p", { "class": "muted", text: "Note: " + n })); });
+    ladder.notes.forEach(function (n) { wrap.appendChild(n.indexOf("not generated") >= 0 ? note("No question was written. " + n + ". Nothing was substituted.", "bad") : note("Note: " + n)); });
     var probe = ladder.probes.filter(function (p) { return p.target_minutes === current; })[0];
     if (probe) wrap.appendChild(renderProbe(probe));
-    else wrap.appendChild(el("p", { "class": "muted", text: "No question passed the checks for this tag." }));
+    else wrap.appendChild(el("p", { "class": "muted", text: "No question passed the checks for this knowledge area." }));
     return wrap;
   }
-
-  var refNote = {};
 
   function renderProbe(p, opts) {
     var wrap = el("div", {});
     var rc = p.reference_check;
-    wrap.appendChild(el("p", { text: p.question }));
+    wrap.appendChild(el("p", { text: p.question, style: "font-size:17px;font-weight:600" }));
     wrap.appendChild(pre(p.signature));
-    if (rc && rc.status === "reference_checked") wrap.appendChild(el("div", { "class": "unverified", text: rc.label }));
-    else if (rc) wrap.appendChild(el("div", { "class": "error", text: rc.label }));
-    else wrap.appendChild(el("div", { "class": "unverified", text: "Unverified: tests were not executed" }));
+
+    wrap.appendChild(sub("Checks"));
+    if (rc && rc.status === "reference_checked") wrap.appendChild(note(rc.label, "warn"));
+    else if (rc) wrap.appendChild(note(rc.label, "bad"));
+    else wrap.appendChild(note("Unverified: tests were not executed", "warn"));
     if (rc) {
       var matched = rc.cases.filter(function (c) { return c.passed; }).length;
       wrap.appendChild(el("p", { "class": "muted", text: "Reference matched " + matched + " of " + rc.cases.length + " cases (" + rc.runner + ", " + rc.date + (rc.served === "recorded" ? ", recorded result" : "") + "). Both the reference and the expected values came from the same model." }));
@@ -213,17 +478,14 @@
     if (rc) head.push(el("th", { text: "Reference output" }));
     head.push(el("th", { text: "Note" }));
     var rows = p.cases.map(function (c) {
+      var r = byId[c.case_id];
       var cells = [el("td", { text: JSON.stringify(c.args) }), el("td", { text: JSON.stringify(c.expected) })];
-      if (rc) {
-        var r = byId[c.case_id];
-        cells.push(el("td", { text: !r ? "-" : (r.error ? r.error : JSON.stringify(r.got)) + (r.passed ? "" : "   <- does not match") }));
-      }
+      if (rc) cells.push(el("td", { text: !r ? "-" : (r.error ? r.error : JSON.stringify(r.got)) + (r.passed ? "" : "   <- does not match") }));
       cells.push(el("td", { text: c.note }));
-      return el("tr", {}, cells);
+      return el("tr", { "class": r && !r.passed ? "bad" : "" }, cells);
     });
     wrap.appendChild(el("table", {}, [el("tr", {}, head)].concat(rows)));
-    var d = el("details", {}, [el("summary", { text: rc ? "Reference solution (model-written; run in a sandbox only for this check)" : "Reference solution (model-written, not run)" }), pre(p.reference_solution)]);
-    wrap.appendChild(d);
+    wrap.appendChild(el("details", {}, [el("summary", { text: rc ? "Reference solution (model-written; run in a sandbox only for this check)" : "Reference solution (model-written, not run)" }), pre(p.reference_solution)]));
     var failed = p.static_checks.checks.filter(function (c) { return !c.passed; }).length;
     wrap.appendChild(el("p", { "class": "muted", text: "Static checks: " + p.static_checks.checks.length + " run, " + failed + " failed. Generated by " + p.provenance.model + " (" + p.provenance.provider + "), " + p.provenance.date + "." }));
 
@@ -231,25 +493,28 @@
     wrap.appendChild(renderReferenceControl(p));
     wrap.appendChild(renderReview(p));
 
+    wrap.appendChild(sub("Interviewer decision"));
     var row = el("div", { "class": "row" });
     row.appendChild(chip(p.approval === "pending" ? "Awaiting approval" : (p.approval === "approved" ? "Approved by " + p.approved_by : "Rejected by " + p.approved_by), p.approval === "approved" ? "supported" : (p.approval === "rejected" ? "doubtful" : "")));
+    var who = el("input", { type: "text", placeholder: "Your name", maxlength: "60", "aria-label": "Your name" });
     var ok = el("button", { "class": "primary", text: "Approve" }), no = el("button", { text: "Reject" });
     function decide(kind) {
-      var by = $("who").value.trim();
+      var by = who.value.trim();
       if (!by) { showError("Enter your name first."); return; }
       api("/api/probes/" + p.probe_id + "/" + kind, "POST", { by: by }).then(refresh).catch(showError);
     }
     ok.onclick = function () { decide("approve"); }; no.onclick = function () { decide("reject"); };
     var blocked = p.verification === "reference_failed";
     if (blocked) { ok.disabled = true; ok.title = "Approval is disabled: the reference check failed."; }
-    row.appendChild(ok); row.appendChild(no);
+    row.appendChild(who); row.appendChild(ok); row.appendChild(no);
     wrap.appendChild(row);
-    if (blocked) wrap.appendChild(el("p", { "class": "muted", text: "Approval is disabled: the reference check failed, so a stated expected value may be wrong. You can still reject this probe." }));
+    wrap.appendChild(el("p", { "class": "muted", text: "Approving records that you read the question. It does not mean it was tested." }));
+    if (blocked) wrap.appendChild(note("Approval is disabled: the reference check failed, so a stated expected value may be wrong. You can still reject this probe.", "bad"));
     return wrap;
   }
 
   function renderReferenceControl(p) {
-    var box = el("div", { "class": "review" });
+    var box = el("div", {});
     if (p.reference_check) return box;
     var b = el("button", { text: "Check the reference" });
     b.onclick = function () {
@@ -259,27 +524,28 @@
         return refresh();
       }).catch(function (e) { b.disabled = false; b.textContent = "Check the reference"; showError(e); });
     };
-    box.appendChild(b);
+    box.appendChild(el("div", { "class": "row" }, [b]));
     if (refNote[p.probe_id]) box.appendChild(el("p", { "class": "muted", text: refNote[p.probe_id] }));
     return box;
   }
 
   function renderReview(p) {
-    var box = el("div", { "class": "review" });
+    var box = el("div", {});
     if (p.review) {
       var r = p.review;
+      box.appendChild(sub("Reviewer (advisory)"));
       box.appendChild(el("p", { "class": "muted", text: r.label + ". Advisory only." }));
       box.appendChild(el("p", { "class": "muted", text: "Answered by " + r.provenance.provider + " / " + r.provenance.model + (r.weaker_check ? " (weaker check)" : "") + "." }));
       (r.provenance.skipped || []).forEach(function (sk) { box.appendChild(el("p", { "class": "muted", text: "Passed over: " + sk })); });
       box.appendChild(el("p", { text: "Estimated " + r.estimated_minutes + " min (" + r.difficulty.replace("_", " ") + " for a " + p.target_minutes + " min slot)." }));
       r.concerns.forEach(function (c) { box.appendChild(el("p", { "class": "muted", text: "Concern: " + c })); });
-      r.case_problems.forEach(function (c) { box.appendChild(el("p", { "class": "unverified", text: "Possible wrong case: " + c })); });
+      r.case_problems.forEach(function (c) { box.appendChild(note("Possible wrong case: " + c, "warn")); });
       return box;
     }
     if (state.reviewer && state.reviewer.enabled) {
       var b = el("button", { text: "Ask the reviewer (advisory; tries " + state.reviewer.models.join(", then ") + ")" });
       b.onclick = function () { b.disabled = true; b.textContent = "Reviewing..."; api("/api/probes/" + p.probe_id + "/review", "POST").then(refresh).catch(function (e) { b.disabled = false; b.textContent = "Ask the reviewer"; showError(e); }); };
-      box.appendChild(b);
+      box.appendChild(el("div", { "class": "row" }, [b]));
     }
     return box;
   }
@@ -290,17 +556,18 @@
 
   function loadExample() {
     api("/api/examples/flawed").then(function (ex) {
-      var box = $("example"); box.textContent = ""; box.hidden = false;
-      box.appendChild(el("h2", { text: "Known flawed example" }));
-      box.appendChild(el("p", { "class": "muted", text: "Kept to show why the reference check exists. This question passed every static check, but one expected value is wrong. It is not offered to interviewers." }));
-      box.appendChild(renderProbe(ex.probe, { example: true }));
+      var box = $("example"); box.textContent = "";
+      box.appendChild(el("div", { "class": "card" }, [renderProbe(ex.probe, { example: true })]));
+      $("exampleblock").hidden = false;
     }).catch(function () { /* the example is optional */ });
   }
 
-  api("/api/state").then(function (s) {
-    state = s; renderBanners(); renderSegments(); render();
-    if (s.segments.length) select(s.segments[0].segment_id);
-    loadExample();
+  $("badflag").onchange = function () { loadHandoff().catch(showError); };
+  $("send").onclick = send;
+
+  Promise.all([api("/api/state"), api("/api/handoff")]).then(function (r) {
+    state = r[0]; hand = r[1];
+    renderBanners(); renderHandoff(); loadExample();
   }).catch(showError);
 })();
 </script>
