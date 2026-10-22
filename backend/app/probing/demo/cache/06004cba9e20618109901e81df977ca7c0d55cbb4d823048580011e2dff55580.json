@@ -1,0 +1,1 @@
+{"text":"{\"tags\": [{\"tag_id\": \"heap_priority_queue\", \"why\": \"The snippet iterates over an item frequency mapping and pushes each tuple into a min-heap.\"}]}","tokens_in":340,"tokens_out":38,"model":"gemini-3.5-flash-lite","provider":"gemini","family":"google","latency_ms":1187}
