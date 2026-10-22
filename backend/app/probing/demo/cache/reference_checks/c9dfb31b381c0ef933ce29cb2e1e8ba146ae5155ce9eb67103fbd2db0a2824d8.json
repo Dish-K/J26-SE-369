@@ -1,0 +1,58 @@
+{
+  "status": "reference_checked",
+  "label": "Reference-checked: not independently verified.",
+  "runner": "docker python:3.12-slim, --network none",
+  "checker": "exact",
+  "date": "2026-10-21",
+  "cases": [
+    {
+      "case_id": "c1",
+      "passed": true,
+      "expected": 5,
+      "got": 5,
+      "error": null,
+      "hit_limit": false
+    },
+    {
+      "case_id": "c2",
+      "passed": true,
+      "expected": 4,
+      "got": 4,
+      "error": null,
+      "hit_limit": false
+    },
+    {
+      "case_id": "c3",
+      "passed": true,
+      "expected": 1,
+      "got": 1,
+      "error": null,
+      "hit_limit": false
+    },
+    {
+      "case_id": "c4",
+      "passed": true,
+      "expected": 10,
+      "got": 10,
+      "error": null,
+      "hit_limit": false
+    },
+    {
+      "case_id": "c5",
+      "passed": true,
+      "expected": -2,
+      "got": -2,
+      "error": null,
+      "hit_limit": false
+    },
+    {
+      "case_id": "c6",
+      "passed": true,
+      "expected": 5,
+      "got": 5,
+      "error": null,
+      "hit_limit": false
+    }
+  ],
+  "served": "live"
+}
