@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C3 Adaptive Probing demo</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2329; --muted: #5d6874; --line: #d9dee4;
+    --accent: #1f5fbf; --warn-bg: #fff4d6; --warn-text: #6b4a00; --ok-bg: #e2f4e6; --ok-text: #14532d;
+    --bad-bg: #fde4e4; --bad-text: #7a1f1f; --info-bg: #e5eefb; --info-text: #17407f; --code-bg: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181d; --panel: #1c2128; --text: #e6e9ed; --muted: #9aa5b1; --line: #313a45;
+      --accent: #6aa3f5; --warn-bg: #3a3012; --warn-text: #f3d98b; --ok-bg: #12331e; --ok-text: #9be3b0;
+      --bad-bg: #3d1a1a; --bad-text: #f2a9a9; --info-bg: #14284a; --info-text: #a9c8f5; --code-bg: #12161b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+  header, main { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 20px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  p.sub { margin: 0 0 12px; color: var(--muted); }
+  .banners { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .banner { padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--warn-bg); color: var(--warn-text); }
+  .grid { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; padding-bottom: 40px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 16px; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 5px 12px; border-radius: 6px; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.seg { display: block; width: 100%; text-align: left; margin-bottom: 8px; }
+  button.seg[aria-pressed="true"] { border-color: var(--accent); outline: 2px solid var(--accent); }
+  pre { background: var(--code-bg); border-radius: 6px; padding: 10px; overflow-x: auto; margin: 8px 0; font: 13px/1.45 ui-monospace, Consolas, monospace; white-space: pre; }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; margin-right: 6px; background: var(--info-bg); color: var(--info-text); }
+  .chip.supported { background: var(--ok-bg); color: var(--ok-text); }
+  .chip.doubtful { background: var(--bad-bg); color: var(--bad-text); }
+  .chip.unchecked, .chip.rule_only { background: var(--warn-bg); color: var(--warn-text); }
+  .tag { border-top: 1px solid var(--line); padding: 10px 0; }
+  .tag:first-of-type { border-top: 0; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .levels { display: flex; gap: 6px; margin: 8px 0; }
+  .levels button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .unverified { background: var(--warn-bg); color: var(--warn-text); padding: 6px 10px; border-radius: 6px; font-weight: 600; margin: 8px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  td, th { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; font-family: ui-monospace, Consolas, monospace; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  input[type=text] { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); }
+  .review { margin-top: 8px; }
+  .error { color: var(--bad-text); background: var(--bad-bg); padding: 6px 10px; border-radius: 6px; margin: 8px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>C3 Adaptive Probing: interviewer preview</h1>
+  <p class="sub">Flagged code segment, knowledge areas, and follow-up questions to approve. Tags are evidence about the code, not about the candidate.</p>
+  <div class="banners" id="banners"></div>
+</header>
+<main>
+  <div class="grid">
+    <section>
+      <div class="panel">
+        <h2>Flagged segments</h2>
+        <p class="muted">Constructed demo solution; the flag confidences are invented.</p>
+        <div id="segments"></div>
+      </div>
+      <div class="panel">
+        <h2>Interviewer</h2>
+        <input type="text" id="who" placeholder="Your name" maxlength="60" aria-label="Your name">
+        <p class="muted">Approving a probe records that you read it. It does not mean it was tested.</p>
+      </div>
+    </section>
+    <section id="detail"></section>
+  </div>
+  <div class="panel" id="example" hidden></div>
+</main>
+<script>
+(function () {
+  "use strict";
+  var state = null, selected = null, detail = null, level = {};
+  var $ = function (id) { return document.getElementById(id); };
+
+  function el(tag, props, children) {
+    var node = document.createElement(tag);
+    Object.keys(props || {}).forEach(function (k) {
+      if (k === "text") node.textContent = props[k]; else node.setAttribute(k, props[k]);
+    });
+    (children || []).forEach(function (c) { if (c) node.appendChild(c); });
+    return node;
+  }
+  function pre(text) { return el("pre", { text: text }); }
+  function chip(text, cls) { return el("span", { "class": "chip " + (cls || ""), text: text }); }
+
+  function api(path, method, body) {
+    var opts = { method: method || "GET", headers: {} };
+    if (body) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+    return fetch(path, opts).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) throw new Error(j.detail || ("HTTP " + r.status));
+        return j;
+      });
+    });
+  }
+  function showError(e) {
+    var box = el("div", { "class": "error", role: "alert", text: String(e.message || e) });
+    $("detail").insertBefore(box, $("detail").firstChild);
+  }
+
+  function renderBanners() {
+    var box = $("banners"); box.textContent = "";
+    var names = state.banners.slice();
+    if (detail && detail.mapper && detail.mapper.provenance.cache_hit && names.indexOf("Cached result") < 0) names.push("Cached result");
+    names.forEach(function (b) { box.appendChild(el("span", { "class": "banner", text: b })); });
+  }
+
+  function renderSegments() {
+    var box = $("segments"); box.textContent = "";
+    state.segments.forEach(function (s) {
+      var label = "Lines " + s.start_line + "-" + s.end_line + "  (flag confidence " + s.flag_confidence + ")" + (s.mapped ? "  mapped" : "");
+      var b = el("button", { "class": "seg", "aria-pressed": String(selected === s.segment_id), text: label });
+      b.onclick = function () { select(s.segment_id); };
+      box.appendChild(b);
+    });
+  }
+
+  function select(id) {
+    selected = id;
+    api("/api/segments/" + id).then(function (d) { detail = d; render(); }).catch(showError);
+  }
+
+  function render() {
+    renderSegments(); renderBanners();
+    var seg = state.segments.filter(function (s) { return s.segment_id === selected; })[0];
+    var box = $("detail"); box.textContent = "";
+    if (!seg) { box.appendChild(el("p", { "class": "muted", text: "Pick a segment on the left." })); return; }
+
+    var codePanel = el("div", { "class": "panel" }, [
+      el("h2", { text: "Segment, lines " + seg.start_line + "-" + seg.end_line }),
+      pre(seg.code),
+    ]);
+    box.appendChild(codePanel);
+
+    var m = detail.mapper;
+    var mapPanel = el("div", { "class": "panel" }, [el("h2", { text: "Knowledge areas" })]);
+    if (!m) {
+      var go = el("button", { "class": "primary", text: "Map this segment" });
+      go.onclick = function () { go.disabled = true; go.textContent = "Mapping..."; api("/api/segments/" + selected + "/map", "POST").then(refresh).catch(function (e) { go.disabled = false; go.textContent = "Map this segment"; showError(e); }); };
+      mapPanel.appendChild(go);
+    } else {
+      mapPanel.appendChild(el("p", { "class": "muted", text: "Overall: " + m.overall_status + ". Model: " + m.provenance.model + " (" + m.provenance.provider + "), prompt " + m.provenance.prompt_version + ", " + m.provenance.date + "." }));
+      m.notes.forEach(function (n) { mapPanel.appendChild(el("p", { "class": "muted", text: "Note: " + n })); });
+      m.ignored_strong_cues.forEach(function (i) { mapPanel.appendChild(el("p", { "class": "unverified", text: "Strong rule cue not reflected in the model's tags: " + i.cue + " points at " + i.tag_id })); });
+      m.tags.forEach(function (t) { mapPanel.appendChild(renderTag(t)); });
+    }
+    box.appendChild(mapPanel);
+  }
+
+  function renderTag(t) {
+    var wrap = el("div", { "class": "tag" });
+    wrap.appendChild(el("div", {}, [chip("#" + t.rank), chip(t.status, t.status), el("strong", { text: t.tag })]));
+    if (t.why) wrap.appendChild(el("p", { "class": "muted", text: t.why }));
+    if (t.cues.length) wrap.appendChild(el("p", { "class": "muted", text: "Rule cues: " + t.cues.join("; ") }));
+    if (t.anchor_note) wrap.appendChild(el("p", { "class": "muted", text: t.anchor_note }));
+    var ladder = detail.ladders[t.tag_id];
+    if (!ladder) {
+      var b = el("button", { text: "Generate questions (5 / 10 / 20 min)" });
+      b.onclick = function () { b.disabled = true; b.textContent = "Generating..."; api("/api/segments/" + selected + "/ladder/" + t.tag_id, "POST").then(refresh).catch(function (e) { b.disabled = false; b.textContent = "Generate questions (5 / 10 / 20 min)"; showError(e); }); };
+      wrap.appendChild(b);
+    } else {
+      wrap.appendChild(renderLadder(t.tag_id, ladder));
+    }
+    return wrap;
+  }
+
+  function renderLadder(tagId, ladder) {
+    var wrap = el("div", {});
+    var current = level[tagId] || ladder.default_level;
+    if (!ladder.probes.some(function (p) { return p.target_minutes === current; }) && ladder.probes.length) current = ladder.probes[0].target_minutes;
+    var tabs = el("div", { "class": "levels", role: "group", "aria-label": "Time budget" });
+    ladder.probes.forEach(function (p) {
+      var b = el("button", { "aria-pressed": String(p.target_minutes === current), text: p.target_minutes + " min" });
+      b.onclick = function () { level[tagId] = p.target_minutes; render(); };
+      tabs.appendChild(b);
+    });
+    wrap.appendChild(tabs);
+    ladder.notes.forEach(function (n) { wrap.appendChild(el("p", { "class": "muted", text: "Note: " + n })); });
+    var probe = ladder.probes.filter(function (p) { return p.target_minutes === current; })[0];
+    if (probe) wrap.appendChild(renderProbe(probe));
+    else wrap.appendChild(el("p", { "class": "muted", text: "No question passed the checks for this tag." }));
+    return wrap;
+  }
+
+  var refNote = {};
+
+  function renderProbe(p, opts) {
+    var wrap = el("div", {});
+    var rc = p.reference_check;
+    wrap.appendChild(el("p", { text: p.question }));
+    wrap.appendChild(pre(p.signature));
+    if (rc && rc.status === "reference_checked") wrap.appendChild(el("div", { "class": "unverified", text: rc.label }));
+    else if (rc) wrap.appendChild(el("div", { "class": "error", text: rc.label }));
+    else wrap.appendChild(el("div", { "class": "unverified", text: "Unverified: tests were not executed" }));
+    if (rc) {
+      var matched = rc.cases.filter(function (c) { return c.passed; }).length;
+      wrap.appendChild(el("p", { "class": "muted", text: "Reference matched " + matched + " of " + rc.cases.length + " cases (" + rc.runner + ", " + rc.date + (rc.served === "recorded" ? ", recorded result" : "") + "). Both the reference and the expected values came from the same model." }));
+    }
+    var byId = {};
+    if (rc) rc.cases.forEach(function (c) { byId[c.case_id] = c; });
+    var head = [el("th", { text: "Arguments" }), el("th", { text: "Expected (model's claim)" })];
+    if (rc) head.push(el("th", { text: "Reference output" }));
+    head.push(el("th", { text: "Note" }));
+    var rows = p.cases.map(function (c) {
+      var cells = [el("td", { text: JSON.stringify(c.args) }), el("td", { text: JSON.stringify(c.expected) })];
+      if (rc) {
+        var r = byId[c.case_id];
+        cells.push(el("td", { text: !r ? "-" : (r.error ? r.error : JSON.stringify(r.got)) + (r.passed ? "" : "   <- does not match") }));
+      }
+      cells.push(el("td", { text: c.note }));
+      return el("tr", {}, cells);
+    });
+    wrap.appendChild(el("table", {}, [el("tr", {}, head)].concat(rows)));
+    var d = el("details", {}, [el("summary", { text: rc ? "Reference solution (model-written; run in a sandbox only for this check)" : "Reference solution (model-written, not run)" }), pre(p.reference_solution)]);
+    wrap.appendChild(d);
+    var failed = p.static_checks.checks.filter(function (c) { return !c.passed; }).length;
+    wrap.appendChild(el("p", { "class": "muted", text: "Static checks: " + p.static_checks.checks.length + " run, " + failed + " failed. Generated by " + p.provenance.model + " (" + p.provenance.provider + "), " + p.provenance.date + "." }));
+
+    if (opts && opts.example) return wrap;
+    wrap.appendChild(renderReferenceControl(p));
+    wrap.appendChild(renderReview(p));
+
+    var row = el("div", { "class": "row" });
+    row.appendChild(chip(p.approval === "pending" ? "Awaiting approval" : (p.approval === "approved" ? "Approved by " + p.approved_by : "Rejected by " + p.approved_by), p.approval === "approved" ? "supported" : (p.approval === "rejected" ? "doubtful" : "")));
+    var ok = el("button", { "class": "primary", text: "Approve" }), no = el("button", { text: "Reject" });
+    function decide(kind) {
+      var by = $("who").value.trim();
+      if (!by) { showError("Enter your name first."); return; }
+      api("/api/probes/" + p.probe_id + "/" + kind, "POST", { by: by }).then(refresh).catch(showError);
+    }
+    ok.onclick = function () { decide("approve"); }; no.onclick = function () { decide("reject"); };
+    var blocked = p.verification === "reference_failed";
+    if (blocked) { ok.disabled = true; ok.title = "Approval is disabled: the reference check failed."; }
+    row.appendChild(ok); row.appendChild(no);
+    wrap.appendChild(row);
+    if (blocked) wrap.appendChild(el("p", { "class": "muted", text: "Approval is disabled: the reference check failed, so a stated expected value may be wrong. You can still reject this probe." }));
+    return wrap;
+  }
+
+  function renderReferenceControl(p) {
+    var box = el("div", { "class": "review" });
+    if (p.reference_check) return box;
+    var b = el("button", { text: "Check the reference" });
+    b.onclick = function () {
+      b.disabled = true; b.textContent = "Checking...";
+      api("/api/probes/" + p.probe_id + "/reference-check", "POST").then(function (updated) {
+        if (!updated.reference_check) refNote[p.probe_id] = "Not available here: no code runner is configured and there is no recorded result. The probe stays unverified.";
+        return refresh();
+      }).catch(function (e) { b.disabled = false; b.textContent = "Check the reference"; showError(e); });
+    };
+    box.appendChild(b);
+    if (refNote[p.probe_id]) box.appendChild(el("p", { "class": "muted", text: refNote[p.probe_id] }));
+    return box;
+  }
+
+  function renderReview(p) {
+    var box = el("div", { "class": "review" });
+    if (p.review) {
+      var r = p.review;
+      box.appendChild(el("p", { "class": "muted", text: r.label + ". Advisory only." }));
+      box.appendChild(el("p", { "class": "muted", text: "Answered by " + r.provenance.provider + " / " + r.provenance.model + (r.weaker_check ? " (weaker check)" : "") + "." }));
+      (r.provenance.skipped || []).forEach(function (sk) { box.appendChild(el("p", { "class": "muted", text: "Passed over: " + sk })); });
+      box.appendChild(el("p", { text: "Estimated " + r.estimated_minutes + " min (" + r.difficulty.replace("_", " ") + " for a " + p.target_minutes + " min slot)." }));
+      r.concerns.forEach(function (c) { box.appendChild(el("p", { "class": "muted", text: "Concern: " + c })); });
+      r.case_problems.forEach(function (c) { box.appendChild(el("p", { "class": "unverified", text: "Possible wrong case: " + c })); });
+      return box;
+    }
+    if (state.reviewer && state.reviewer.enabled) {
+      var b = el("button", { text: "Ask the reviewer (advisory; tries " + state.reviewer.models.join(", then ") + ")" });
+      b.onclick = function () { b.disabled = true; b.textContent = "Reviewing..."; api("/api/probes/" + p.probe_id + "/review", "POST").then(refresh).catch(function (e) { b.disabled = false; b.textContent = "Ask the reviewer"; showError(e); }); };
+      box.appendChild(b);
+    }
+    return box;
+  }
+
+  function refresh() {
+    return api("/api/state").then(function (s) { state = s; return api("/api/segments/" + selected); }).then(function (d) { detail = d; render(); });
+  }
+
+  function loadExample() {
+    api("/api/examples/flawed").then(function (ex) {
+      var box = $("example"); box.textContent = ""; box.hidden = false;
+      box.appendChild(el("h2", { text: "Known flawed example" }));
+      box.appendChild(el("p", { "class": "muted", text: "Kept to show why the reference check exists. This question passed every static check, but one expected value is wrong. It is not offered to interviewers." }));
+      box.appendChild(renderProbe(ex.probe, { example: true }));
+    }).catch(function () { /* the example is optional */ });
+  }
+
+  api("/api/state").then(function (s) {
+    state = s; renderBanners(); renderSegments(); render();
+    if (s.segments.length) select(s.segments[0].segment_id);
+    loadExample();
+  }).catch(showError);
+})();
+</script>
+</body>
+</html>
