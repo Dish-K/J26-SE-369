@@ -9,6 +9,10 @@ const HANDSHAKE_SAMPLES = 8;
 const SESSION_OPEN_ELSEWHERE = 4409;
 const RETRY_MS = 2_000;
 const RETRY_FOR_MS = 45_000;
+const ACK_WAIT_MS = 10_000;
+const SUBMIT_WAIT_MS = 10_000;
+const SUBMIT_ATTEMPTS = 2;
+const WAIT_STEP_MS = 50;
 const SESSION_KEY = "codetrace.telemetry.session";
 const CHANNEL_NAME = "codetrace.telemetry";
 
@@ -28,6 +32,7 @@ type Reply = {
   pong?: { t0: number; t1: number; t2: number };
   ready?: { load_seq: number };
   ack?: { load_seq: number; up_to_batch_seq: number };
+  submitted?: { task_id: string };
 };
 
 type SentBatch = { loadSeq: number; batchSeq: number; text: string };
@@ -47,6 +52,8 @@ export class TelemetryClient {
   private nextBatchSeq = 0;
   private openElsewhere = false;
   private retryUntil = 0;
+  private taskOpen = true;
+  private submittedTask: string | null = null;
 
   constructor(ids: SessionIds) {
     this.ids = ids;
@@ -77,14 +84,40 @@ export class TelemetryClient {
   }
 
   record(event: CapturedEvent): void {
-    // Only a ready connection has a load_seq to send with the event.
-    if (this.status !== "ready") {
+    // Only a ready connection has a load_seq to send with the event, and a submitted task takes no more.
+    if (this.status !== "ready" || !this.taskOpen) {
       return;
     }
     this.buffer.push({ ...event, task_id: this.ids.task_id });
     if (this.buffer.length >= MAX_BATCH_EVENTS) {
       this.flush();
     }
+  }
+
+  // True once the server has stored the answer; false means it was not submitted.
+  async submit(code: string, versionId: number): Promise<boolean> {
+    if (this.status !== "ready" || !this.taskOpen) {
+      return false;
+    }
+    this.taskOpen = false;
+    this.flush();
+
+    // Every keystroke must be stored before the task closes, or its last windows miss them.
+    if (await this.waitFor(() => this.unconfirmed.length === 0, ACK_WAIT_MS)) {
+      const text = JSON.stringify({
+        submit: { task_id: this.ids.task_id, code_text: code, version_id: versionId },
+      });
+      for (let attempt = 0; attempt < SUBMIT_ATTEMPTS; attempt++) {
+        // A resend is safe: the server answers a stored submission again.
+        this.socket?.send(text);
+        if (await this.waitFor(() => this.submittedTask === this.ids.task_id, SUBMIT_WAIT_MS)) {
+          return true;
+        }
+      }
+    }
+
+    this.taskOpen = this.status === "ready";
+    return false;
   }
 
   private connect(autoRetry: boolean): void {
@@ -133,6 +166,8 @@ export class TelemetryClient {
       this.unconfirmed = this.unconfirmed.filter(
         (batch) => batch.loadSeq !== load_seq || batch.batchSeq > up_to_batch_seq,
       );
+    } else if (reply.submitted) {
+      this.submittedTask = reply.submitted.task_id;
     }
   }
 
@@ -197,6 +232,23 @@ export class TelemetryClient {
     });
     this.unconfirmed.push({ loadSeq: this.loadSeq, batchSeq, text });
     this.socket?.send(text);
+  }
+
+  // Polls, because a submit happens once per task and needs no hook in every reply.
+  private waitFor(done: () => boolean, timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    return new Promise((resolve) => {
+      const check = () => {
+        if (done()) {
+          resolve(true);
+        } else if (this.status !== "ready" || Date.now() >= deadline) {
+          resolve(false);
+        } else {
+          setTimeout(check, WAIT_STEP_MS);
+        }
+      };
+      check();
+    });
   }
 
   private setStatus(status: CaptureStatus): void {
