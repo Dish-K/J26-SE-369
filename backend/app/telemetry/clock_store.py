@@ -27,6 +27,10 @@ class SessionLocks:
         with self._guard:
             return self._owners.get(session_id) is owner
 
+    def is_held(self, session_id: UUID) -> bool:
+        with self._guard:
+            return session_id in self._owners
+
     def release(self, session_id: UUID, owner: object) -> None:
         with self._guard:
             if self._owners.get(session_id) is owner:
