@@ -1,0 +1,28 @@
+{
+  "version": "experimental-v1",
+  "seed": 150420,
+  "personas": 48,
+  "episode_cycles": 2,
+  "episode_seconds": [70, 110],
+  "max_actions_per_episode": 256,
+  "initial_document_chars": 8192,
+  "persona_timing_scale": [0.8, 1.25],
+  "background_unaided_probability_choices": [0.0, 0.0, 0.03, 0.1],
+  "ide_assistant_probability": [0.3, 0.75],
+  "external_assistant_probability": [0.15, 0.55],
+  "ide_chunk_empirical_length_bounds": [4, 400],
+  "external_chunk_empirical_length_bounds": [8, 2048],
+  "external_consultation_gap_ms": [2000, 20000],
+  "training_split_fractions": [0.7, 0.15, 0.15],
+  "threshold_grid": [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95],
+  "simulation_assumptions": [
+    "AI probability/length filters, consultation gaps, timing-scale range and episode structure are provisional simulation settings, not measurements of AI behavior from CS1.",
+    "Empirical editing lengths and conditional gaps come only from the received calibration cache; no holdout is read.",
+    "Known AI-supplied contributions may arrive through insertion, acceptance, paste or simulated retyping. A raw event kind never determines its provenance label.",
+    "Typed edits of explicitly AI-supplied content are tagged by that content source; independent background edits in the same episode are tagged no_ai.",
+    "No physical keyboard, focus, run completion or outcome measurements are fabricated.",
+    "A window needs at least one non-reset edit affecting code with known provenance. No activity-count confidence threshold is applied; empty/run-only windows are insufficient.",
+    "Deletion provenance is inherited from the affected synthetic code. Touching the unknown artificial baseline makes that contribution uncertain.",
+    "This is an experimental first model, not a validated human/AI behavioral generator or deployment-ready classifier."
+  ]
+}
