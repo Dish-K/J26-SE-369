@@ -9,6 +9,8 @@ from backend.app.db.pool import (
     close_db_pool,
     create_db_pool,
 )
+
+from backend.app.explainability.router import router as explainability_router
 from backend.app.telemetry.clock_store import SessionLocks
 from backend.app.telemetry.router import router as telemetry_router
 from backend.app.telemetry.scheduler import run_scheduler
@@ -31,6 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="CodeTrace", lifespan=lifespan)
 app.include_router(telemetry_router)
+app.include_router(explainability_router)
 
 
 @app.get("/health")
