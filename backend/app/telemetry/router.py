@@ -24,7 +24,10 @@ from backend.app.telemetry.ingest import (
     Ping,
     SessionStart,
     event_rows,
+    Submit,
 )
+
+from backend.app.telemetry.tasks import submit_task
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +149,12 @@ async def start_session(start: SessionStart, request: Request) -> dict[str, UUID
 
     return {"session_id": session_id, "task_id": task_id}
 
-_MESSAGES: dict[str, type[BaseModel]] = {"hello": Hello, "ping": Ping, "clock": ClockSamples}
+_MESSAGES: dict[str, type[BaseModel]] = {
+    "hello": Hello,
+    "ping": Ping,
+    "clock": ClockSamples,
+    "submit": Submit,
+}
 
 def _server_ms() -> float:
     return time_ns() / 1_000_000
@@ -177,6 +185,7 @@ class _TelemetrySocket:
         self.session_id: UUID | None = None
         # One offset per page load, so every batch uses the offset of its own load_seq.
         self.offsets: dict[int, float] = {}
+        self.load_seq: int | None = None
 
     async def handle(self, message: str, received_ms: float) -> None:
         try:
@@ -202,6 +211,8 @@ class _TelemetrySocket:
                 await self.pong(body, received_ms)
             elif kind == "clock":
                 await self.clock(body)
+            elif kind == "submit":
+                await self.submit(body)
             else:
                 await self.batch(body)
         except UnknownSession as exc:
@@ -230,6 +241,7 @@ class _TelemetrySocket:
                 connection, self.locks, self.session_id, self.websocket, clock.samples
             )
         self.offsets[load_seq] = offset
+        self.load_seq = load_seq
         await self.websocket.send_json({"ready": {"load_seq": load_seq}})
 
     async def batch(self, batch: Batch) -> None:
@@ -253,6 +265,18 @@ class _TelemetrySocket:
             await self.websocket.send_json(
                 {"ack": {"load_seq": batch.load_seq, "up_to_batch_seq": up_to}}
             )
+
+    async def submit(self, submission: Submit) -> None:
+        if self.load_seq is None:
+            raise _Refused(status.WS_1008_POLICY_VIOLATION, "no clock handshake for this page load")
+
+        async with self.pool.acquire() as connection:
+            accepted = await submit_task(connection, self.session_id, self.load_seq, submission)
+        if not accepted:
+            raise _Refused(status.WS_1008_POLICY_VIOLATION, "task not open")
+
+        await self.websocket.send_json({"submitted": {"task_id": str(submission.task_id)}})
+
 
     def release(self) -> None:
         if self.session_id is not None:
