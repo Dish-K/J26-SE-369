@@ -41,8 +41,15 @@ _FLAGS = (
 )
 
 
+# An extra flag whose lines are outside the file, to show that a bad flag is rejected with a reason.
+_BAD_FLAG = (UUID("00000000-0000-4000-8000-00000000f0ff"), 90, 95, 0.70)
+
+
 class FixtureReader:
     """The demo task's flags and file, in the shape ``extract_segments`` reads."""
+
+    def __init__(self, *, include_bad_flag: bool = False) -> None:
+        self._flags = _FLAGS + ((_BAD_FLAG,) if include_bad_flag else ())
 
     async def get_task_flags(self, task_id: UUID) -> list[FlagInput]:
         if task_id != DEMO_TASK_ID:
@@ -57,7 +64,7 @@ class FixtureReader:
                 start_line=start,
                 end_line=end,
             )
-            for flag_id, start, end, confidence in _FLAGS
+            for flag_id, start, end, confidence in self._flags
         ]
 
     async def get_submission(self, task_id: UUID) -> SubmissionInput | None:

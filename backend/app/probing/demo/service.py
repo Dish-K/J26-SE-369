@@ -2,10 +2,13 @@
 
 Model choice comes from the environment:
 
-- ``PROBING_DEMO_PROVIDER`` = ``fake`` (default, works offline) or ``gemini``.
+- ``PROBING_DEMO_PROVIDER`` = ``fake`` (default, works offline), ``gemini`` or ``live``.
+  ``live`` is short for ``gemini`` with ``PROBING_DEMO_MODE=live``.
 - ``PROBING_DEMO_MODE`` = ``cache`` (default) serves only answers already saved
-  in ``demo/cache/``; ``live`` may call the provider (the gateway still caches,
-  paces and counts every call). The mode only matters for ``gemini``.
+  in ``demo/cache/``; ``live`` may call the real providers (the gateway still
+  caches, paces and counts every call). The mode only matters for ``gemini``.
+  Live mode never falls back to the fake model: a missing key or a provider error
+  is shown on the page.
 
 Everything the page shows is data to be displayed: the browser code puts text in
 with ``textContent`` and never as HTML.
@@ -64,6 +67,18 @@ class CacheOnlyClient:
         raise LLMError("cache mode: there is no saved answer for this request")
 
 
+class UnavailableClient:
+    """Stands in for a client that could not be built (no key); every call fails with the reason."""
+
+    hosted = True
+
+    def __init__(self, provider: str, family: str, reason: str) -> None:
+        self.provider, self.family, self.reason = provider, family, reason
+
+    async def complete(self, *args, **kwargs):
+        raise MissingApiKey(self.reason)
+
+
 class ReviewUnavailable(RuntimeError):
     """The advisory review was not produced; the message says why (fixed text)."""
 
@@ -72,7 +87,10 @@ class DemoService:
     def __init__(self, *, provider: str = "fake", mode: str = "cache", state_dir: Path | None = None,
                  cache_dir: Path | None = None, settings: AISettings | None = None,
                  runner: RunnerChoice | None = None) -> None:
+        if provider == "live":
+            provider, mode = "gemini", "live"
         self.provider, self.mode = provider, mode
+        self.problems: list[str] = []  # shown on the page; never hidden
         self.runner_choice = runner or make_runner()  # PROBING_RUNNER=docker, else no runner
         self._reference_cache = ReferenceCheckCache((cache_dir or DEMO_DIR / "cache") / "reference_checks")
         settings = settings or AISettings.from_env()
@@ -95,8 +113,12 @@ class DemoService:
             groq_models = (settings.reviewer_model, *GROQ_REVIEWER_MODELS[1:]) if settings.reviewer_model else GROQ_REVIEWER_MODELS
             groq_daily = None
             if mode == "live":
-                client = GeminiClient()
-                reviewer_client = GeminiClient(timeout=REVIEWER_TIMEOUT_SECONDS)  # the 31B model can take a while
+                try:
+                    client = GeminiClient()
+                    reviewer_client = GeminiClient(timeout=REVIEWER_TIMEOUT_SECONDS)  # the 31B model can take a while
+                except MissingApiKey as exc:
+                    self.problems.append(f"{exc}. The Mapper, the generator and the Gemma reviewer cannot call a model.")
+                    client = reviewer_client = UnavailableClient("gemini", "google", str(exc))
                 daily = DailyCounter(settings.max_rpd, settings.cache_dir / "daily_requests.json")
                 try:
                     groq_client = GroqClient(reasoning=GROQ_REASONING)
@@ -106,8 +128,9 @@ class DemoService:
                         token_limit=groq_settings.max_tpd,
                         day_of=utc_date,
                     )
-                except MissingApiKey:
+                except MissingApiKey as exc:
                     groq_client = None  # no Groq key: the chain starts at Gemma
+                    self.problems.append(f"{exc}. The reviewer starts at Gemma instead of the Groq models.")
             else:
                 client = reviewer_client = CacheOnlyClient()
                 groq_client = CacheOnlyClient("groq", "groq")
@@ -144,6 +167,52 @@ class DemoService:
         result = await extract_segments(DEMO_TASK_ID, FixtureReader())
         self._segments = {s.segment_id: s for s in result.segments}
 
+    # --- the mock hand-off from C2 ---------------------------------------------------------------
+
+    async def handoff(self, *, include_bad_flag: bool = False) -> dict[str, Any]:
+        """What the mock C2 hand-off carries: the flags and the submitted file, in the shape C3 reads."""
+        reader = FixtureReader(include_bad_flag=include_bad_flag)
+        flags = await reader.get_task_flags(DEMO_TASK_ID)
+        submission = await reader.get_submission(DEMO_TASK_ID)
+        return {
+            "source": "Mock hand-off from C2: invented flags on constructed code, no real candidate",
+            "task_id": str(DEMO_TASK_ID),
+            "flags": [
+                {
+                    "flag_id": str(f.flag_id),
+                    "category": f.category,
+                    "confidence": f.confidence,
+                    "model_version": f.model_version,
+                    "start_line": f.start_line,
+                    "end_line": f.end_line,
+                }
+                for f in flags
+            ],
+            "code": submission.code_text if submission else "",
+        }
+
+    async def send_handoff(self, *, include_bad_flag: bool = False) -> dict[str, Any]:
+        """Run Segment Extraction on the hand-off and say what came out, including flags it rejected."""
+        result = await extract_segments(DEMO_TASK_ID, FixtureReader(include_bad_flag=include_bad_flag))
+        self._segments = {s.segment_id: s for s in result.segments}  # ids are derived from the flags, so stable
+        return {
+            "segments": [
+                {
+                    "segment_id": str(s.segment_id),
+                    "start_line": s.location.start_line,
+                    "end_line": s.location.end_line,
+                    "flag_ids": [str(i) for i in s.flag_ids],
+                    "entry_function": s.entry_function.name if s.entry_function else None,
+                    "entry_uncertain": bool(s.entry_function and s.entry_function.uncertain),
+                }
+                for s in sorted(result.segments, key=lambda s: s.location.start_line)
+            ],
+            "rejected": [
+                {"flag_id": str(r.flag_id), "reason": r.reason, "detail": r.detail} for r in result.rejected_flags
+            ],
+            "notes": [{"kind": n.kind, "flag_ids": [str(i) for i in n.flag_ids]} for n in result.notes],
+        }
+
     # --- what the page reads -------------------------------------------------------------
 
     def state(self) -> dict[str, Any]:
@@ -160,6 +229,7 @@ class DemoService:
                 "the same provider as the generator is a weaker check",
             },
             "runner": {"mode": self.runner_choice.mode, "note": self.runner_choice.note},
+            "problems": list(self.problems),
             "segments": [
                 {
                     "segment_id": str(s.segment_id),
@@ -180,6 +250,8 @@ class DemoService:
             banners.append("Fake model")
         if self.provider == "gemini" and self.mode == "cache":
             banners.append("Cached result")
+        if self.provider == "gemini" and self.mode == "live":
+            banners.append("Live model")
         return banners
 
     def detail(self, segment_id: UUID) -> dict[str, Any]:

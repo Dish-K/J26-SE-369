@@ -28,6 +28,10 @@ class Decision(BaseModel):
     by: str
 
 
+class Handoff(BaseModel):
+    include_bad_flag: bool = False
+
+
 def create_app(service: DemoService | None = None) -> FastAPI:
     svc = service or DemoService.from_env()
 
@@ -45,6 +49,14 @@ def create_app(service: DemoService | None = None) -> FastAPI:
     @app.get("/api/state")
     def state():
         return svc.state()
+
+    @app.get("/api/handoff")
+    async def handoff(include_bad_flag: bool = False):
+        return await svc.handoff(include_bad_flag=include_bad_flag)
+
+    @app.post("/api/handoff/send")
+    async def send_handoff(body: Handoff = Handoff()):
+        return await svc.send_handoff(include_bad_flag=body.include_bad_flag)
 
     @app.get("/api/segments/{segment_id}")
     def detail(segment_id: UUID):
