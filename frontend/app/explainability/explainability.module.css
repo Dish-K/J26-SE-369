@@ -1,0 +1,381 @@
+/* C4 interviewer explanation view. Uses the site tokens from globals.css. */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-block: 28px 64px;
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: baseline;
+  padding: 12px 16px;
+  border-left: 4px solid var(--color-accent);
+  background: var(--color-paper);
+  font-size: 14px;
+}
+
+.bannerLabel {
+  font-weight: 800;
+}
+
+.bannerNote {
+  color: var(--color-muted);
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(28px, 3.4vw, 44px);
+  line-height: 1.05;
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  color: var(--color-muted);
+  max-width: 720px;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tab {
+  padding: 10px 16px;
+  border: 1px solid var(--color-line);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab:hover {
+  border-color: var(--color-text);
+}
+
+.tabActive {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: #fff;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--color-line);
+  background: var(--color-paper);
+}
+
+.panelWide {
+  grid-column: 1 / -1;
+}
+
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.overline {
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.muted {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.note {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.bigNumber {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.statRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 32px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statValue {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* horizontal bars ----------------------------------------------------------- */
+
+.barRow {
+  display: grid;
+  grid-template-columns: minmax(110px, 190px) minmax(0, 1fr) 64px;
+  gap: 10px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.barTrack {
+  position: relative;
+  height: 12px;
+  background: var(--color-surface);
+}
+
+.barFill {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  background: var(--color-text);
+}
+
+.barFillTarget {
+  background: var(--color-accent);
+}
+
+.barValue {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: right;
+}
+
+/* SHAP diverging bars around a centre line */
+.shapTrack {
+  position: relative;
+  height: 14px;
+  background: linear-gradient(to right, transparent calc(50% - 1px), var(--color-line) calc(50% - 1px), var(--color-line) calc(50% + 1px), transparent calc(50% + 1px));
+}
+
+.shapToward,
+.shapAway {
+  position: absolute;
+  inset-block: 1px;
+}
+
+.shapToward {
+  left: 50%;
+  background: var(--color-accent);
+}
+
+.shapAway {
+  right: 50%;
+  background: var(--color-muted);
+}
+
+.featureName {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.featureValue {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.sentence {
+  margin: 0;
+  font-size: 14px;
+}
+
+.sentenceList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* timeline ------------------------------------------------------------------ */
+
+.timeline {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.window {
+  display: flex;
+  flex: 1 0 120px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--color-line);
+  background: var(--color-bg);
+  font-size: 13px;
+}
+
+.windowSegment {
+  border-color: var(--color-accent);
+  border-width: 2px;
+}
+
+.windowRepresentative {
+  background: #fde6e1;
+}
+
+.windowClass {
+  font-weight: 800;
+}
+
+.windowAi {
+  color: var(--color-accent-dark);
+}
+
+.badge {
+  align-self: flex-start;
+  padding: 2px 6px;
+  background: var(--color-text);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.badgeAccent {
+  background: var(--color-accent);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+/* tables -------------------------------------------------------------------- */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th,
+.table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--color-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.toward {
+  color: var(--color-accent-dark);
+  font-weight: 700;
+}
+
+.away {
+  color: var(--color-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 6px 10px;
+  border: 1px solid var(--color-line);
+  background: var(--color-bg);
+  font-size: 14px;
+}
+
+/* provenance ---------------------------------------------------------------- */
+
+.provenance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 20px;
+  margin: 0;
+}
+
+.provenance dt {
+  color: var(--color-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.provenance dd {
+  margin: 2px 0 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.state {
+  padding: 28px;
+  border: 1px dashed var(--color-line);
+  color: var(--color-muted);
+}
+
+.error {
+  padding: 18px;
+  border-left: 4px solid var(--color-accent-dark);
+  background: var(--color-paper);
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .barRow {
+    grid-template-columns: minmax(90px, 140px) minmax(0, 1fr) 56px;
+  }
+}
