@@ -1,0 +1,225 @@
+{
+  "dataset": "km_dataset.jsonl.gz (18,736 records; doocs/leetcode, neetcode-gh/leetcode, TheAlgorithms/Python)",
+  "taxonomy_version": "2026-10-21-v1",
+  "rules": {
+    "use_records": "language == 'python' and label_quality == 'author-approach' and labels is not empty",
+    "ground_truth": "set of mapped tags from every 'include' label on the record (primary plus acceptable)",
+    "records_with_no_included_label": "skip and count them; report taxonomy gaps (Simulation, Segment Tree / BIT, Ordered Set, Searching)",
+    "split": "by problem_id (never the same problem in dev and test), seed 42",
+    "hit_at_k": "a hit if any of the model's top-k tags is in the ground-truth set; also report 'strict' = primary labels only"
+  },
+  "labels": {
+    "Dynamic Programming": {
+      "primary": "Dynamic Programming",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Hash Table": {
+      "primary": "Hash Table",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Enumeration / Brute Force": {
+      "primary": "Brute Force / Enumeration",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Sorting": {
+      "primary": "Sorting",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Depth-First Search": {
+      "primary": "Graph Traversal",
+      "acceptable": [
+        "Tree",
+        "Recursion & Divide and Conquer"
+      ],
+      "scoring": "include",
+      "note": "DFS is also used on trees and recursively; accept those."
+    },
+    "Greedy": {
+      "primary": "Greedy",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Simulation": {
+      "primary": null,
+      "acceptable": [],
+      "scoring": "exclude",
+      "note": "Taxonomy gap: no Simulation tag. Report as a gap; do not score."
+    },
+    "Math": {
+      "primary": "Math & Number Theory",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Binary Search": {
+      "primary": "Binary Search",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Two Pointers": {
+      "primary": "Two Pointers",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Stack": {
+      "primary": "Stack & Queue",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Recursion": {
+      "primary": "Recursion & Divide and Conquer",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Breadth-First Search": {
+      "primary": "Graph Traversal",
+      "acceptable": [
+        "Stack & Queue",
+        "Tree"
+      ],
+      "scoring": "include",
+      "note": "Level-order on a tree uses a queue; accept those."
+    },
+    "Bit Manipulation": {
+      "primary": "Bit Manipulation",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Prefix Sum": {
+      "primary": "Prefix Sum",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Heap / Priority Queue": {
+      "primary": "Heap / Priority Queue",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Sliding Window": {
+      "primary": "Sliding Window",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Backtracking": {
+      "primary": "Backtracking",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Union-Find": {
+      "primary": "Advanced Graph Algorithms",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Segment Tree / BIT": {
+      "primary": null,
+      "acceptable": [],
+      "scoring": "exclude",
+      "note": "Taxonomy gap: nearest tag is Tree, but a Fenwick tree is array-based. Report as a gap; do not score."
+    },
+    "Shortest Path": {
+      "primary": "Advanced Graph Algorithms",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Graph": {
+      "primary": "Graph Traversal",
+      "acceptable": [
+        "Advanced Graph Algorithms"
+      ],
+      "scoring": "include",
+      "note": "Generic label."
+    },
+    "Ordered Set": {
+      "primary": null,
+      "acceptable": [],
+      "scoring": "exclude",
+      "note": "Taxonomy gap: nearest tag is Tree. Report as a gap; do not score."
+    },
+    "Trie": {
+      "primary": "Tree",
+      "acceptable": [],
+      "scoring": "include",
+      "note": "Tries are trees (CS2023 Trees; IOI lists tries under data structures)."
+    },
+    "Queue": {
+      "primary": "Stack & Queue",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "String": {
+      "primary": "Array & String Manipulation",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Tree": {
+      "primary": "Tree",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Topological Sort": {
+      "primary": "Advanced Graph Algorithms",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Linked List": {
+      "primary": "Linked List",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "String Matching": {
+      "primary": "Array & String Manipulation",
+      "acceptable": [],
+      "scoring": "include",
+      "note": "CS2023 lists Matching under AL-Foundational next to Arrays."
+    },
+    "Divide and Conquer": {
+      "primary": "Recursion & Divide and Conquer",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Matrix": {
+      "primary": "Array & String Manipulation",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    },
+    "Searching": {
+      "primary": null,
+      "acceptable": [],
+      "scoring": "exclude",
+      "note": "Folder-inherited generic label (linear, binary, jump search). Ambiguous; do not score."
+    },
+    "Array": {
+      "primary": "Array & String Manipulation",
+      "acceptable": [],
+      "scoring": "include",
+      "note": ""
+    }
+  }
+}
