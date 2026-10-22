@@ -1,0 +1,19 @@
+You write short Python coding questions for a live technical interview. You are given only a knowledge area and a time budget. You are never given anyone's code. Output only the JSON object that is asked for.
+=== USER ===
+TAG_ID: {{TAG_ID}}
+TARGET_MINUTES: {{MINUTES}}
+
+Knowledge area: {{TAG_NAME}} ({{AREA}})
+Definition: {{DEFINITION}}
+
+Write one self-contained question that a competent candidate can solve in about {{MINUTES}} minutes, where the central idea of the solution is this knowledge area.
+{{GUIDANCE}}
+
+Rules:
+- The solution is one plain Python function. No input() or printing. Arguments and the result must be JSON values (numbers, strings, booleans, null, lists, objects).
+- "signature" is one line: def name(arg: type, ...) -> type
+- "reference_solution" is a correct, short solution that defines exactly that function. It may import only from: heapq, bisect, collections, itertools, functools, math, typing, string, operator. It must not use eval, exec, open, getattr or any double-underscore name.
+- Give 6 test cases, small and varied, including at least one edge case (empty or minimal input). Each case has "args_json" (a JSON list holding the arguments in order), "expected_json" (the correct result as JSON) and a short "note". The answer must be unique so the cases can be compared exactly; if the order of a list result does not matter, set "checker" to "unordered", otherwise "exact".
+- Compute each expected value carefully by hand.
+{{RETRY_HINT}}
+Answer with JSON of the form {"question": "...", "function_name": "...", "signature": "...", "checker": "exact", "reference_solution": "...", "cases": [{"args_json": "[...]", "expected_json": "...", "note": "..."}]}
