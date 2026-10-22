@@ -471,3 +471,11 @@ h1, h2, h3, p { margin-top: 0; }
 .editor-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; margin: 0 0 16px; font-weight: 700; }
 
 button.button { border: 0; font-family: inherit; cursor: pointer; }
+
+button.button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+.button-plain { background: var(--color-surface); color: var(--color-text); }
+
+.editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; margin: 16px 0 0; font-weight: 700; }
+
+.editor-actions p { margin: 0; }
