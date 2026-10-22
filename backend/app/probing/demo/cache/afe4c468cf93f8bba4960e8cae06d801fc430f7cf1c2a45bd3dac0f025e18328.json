@@ -1,0 +1,1 @@
+{"text":"{\n  \"estimated_minutes\": 10,\n  \"difficulty\": \"about_right\",\n  \"concerns\": [],\n  \"case_problems\": []\n}","tokens_in":636,"tokens_out":367,"model":"openai/gpt-oss-120b","provider":"groq","family":"groq","latency_ms":1266}

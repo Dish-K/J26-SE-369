@@ -1,0 +1,1 @@
+{"text":"{\n  \"tags\": [\n    {\n      \"tag_id\": \"hash_table\",\n      \"why\": \"This code snippet iterates through a collection of numbers and builds a frequency map using a Python dictionary.\"\n    }\n  ]\n}","tokens_in":266,"tokens_out":55,"model":"gemini-3.5-flash-lite","provider":"gemini","family":"google","latency_ms":1031}

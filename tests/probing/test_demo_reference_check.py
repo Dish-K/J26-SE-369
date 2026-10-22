@@ -99,8 +99,9 @@ def test_the_flawed_example_is_shown_as_caught_even_in_fake_mode(tmp_path):
     assert [(c["case_id"], c["expected"], c["got"]) for c in bad] == [("c2", 6, 5)]
 
 
-def test_the_recorded_files_are_the_four_expected_ones():
+def test_the_recorded_files_are_the_expected_ones():
+    # 3 heap probes and the flawed example, plus the 3 hash table probes recorded by the live run of 2026-10-22
     files = recorded_files()
-    assert len(files) == 4
+    assert len(files) == 7
     statuses = sorted(ReferenceCheck.model_validate_json(f.read_text(encoding="utf-8")).status for f in files)
-    assert statuses == ["reference_checked"] * 3 + ["reference_failed"]
+    assert statuses == ["reference_checked"] * 4 + ["reference_failed"] * 3
