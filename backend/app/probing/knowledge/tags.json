@@ -1,0 +1,270 @@
+{
+  "taxonomy_version": "2026-10-21-v1",
+  "source": "claude/C3-knowledge-taxonomy-standards-survey.md (18 Oct 2026). Anchors come from summaries of CS2023 Version Gamma, the IOI Syllabus 2025 draft and Codility lessons; 'not named' statements were not full-text checked. Do not invent anchors.",
+  "tags": [
+    {
+      "id": "hash_table",
+      "name": "Hash Table",
+      "area": "Data structures",
+      "definition": "Uses a dictionary or set for constant-time lookup, counting, grouping or de-duplication as the central idea (a visited-set that only supports another technique does not count).",
+      "anchor": {
+        "cs2023": "AL-Foundational: Hash Tables / Maps",
+        "ioi_2025": "Excluded from the IOI syllabus",
+        "codility": "Counting Elements (related)"
+      },
+      "enabled": true,
+      "optional": false,
+      "note": "CS2023 is the anchor: the IOI syllabus excludes hash tables."
+    },
+    {
+      "id": "stack_queue",
+      "name": "Stack & Queue",
+      "area": "Data structures",
+      "definition": "Uses a LIFO stack or a FIFO queue/deque to order work, match nesting, or process items in arrival order.",
+      "anchor": {
+        "cs2023": "AL-Foundational: Stacks; Queues and Dequeues",
+        "ioi_2025": "Stacks and queues",
+        "codility": "Stacks and Queues"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "heap_priority_queue",
+      "name": "Heap / Priority Queue",
+      "area": "Data structures",
+      "definition": "Uses a heap or priority queue to repeatedly take the smallest or largest item, or to keep the top-k.",
+      "anchor": {
+        "cs2023": "AL-Foundational (KA Core): Heaps and Priority Queues",
+        "ioi_2025": "Binary heaps"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "linked_list",
+      "name": "Linked List",
+      "area": "Data structures",
+      "definition": "Builds or manipulates nodes joined by next pointers: reversal, merging, cycle detection, pointer rewiring.",
+      "anchor": {
+        "cs2023": "AL-Foundational: Linked Lists",
+        "ioi_2025": "Linked structures, pointers"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "tree",
+      "name": "Tree",
+      "area": "Data structures",
+      "definition": "Builds or processes tree-structured data: binary trees, BSTs, tries, tree traversals, parent/child relations.",
+      "anchor": {
+        "cs2023": "AL-Foundational: Trees",
+        "ioi_2025": "Balanced BSTs, segment trees, tries, tree traversals"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "array_string",
+      "name": "Array & String Manipulation",
+      "area": "Array techniques",
+      "definition": "The core of the logic is indexing, scanning, slicing, in-place updates, matrix walks or string processing, with no more specific technique doing the work.",
+      "anchor": {
+        "cs2023": "AL-Foundational: Arrays; Matching (KA Core)",
+        "ioi_2025": "Array manipulation; strings and string processing",
+        "codility": "Iterations; Arrays"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "two_pointers",
+      "name": "Two Pointers",
+      "area": "Array techniques",
+      "definition": "Moves two indices through a sequence (from both ends, or at different speeds) to avoid a nested loop.",
+      "anchor": {
+        "ioi_2025": "not named in the parts read",
+        "codility": "Caterpillar method"
+      },
+      "enabled": true,
+      "optional": false,
+      "anchor_note": "interview practice, no curriculum anchor"
+    },
+    {
+      "id": "sliding_window",
+      "name": "Sliding Window",
+      "area": "Array techniques",
+      "definition": "Keeps a contiguous window over a sequence, growing and shrinking it while updating a running state.",
+      "anchor": {
+        "ioi_2025": "not named in the parts read",
+        "codility": "Caterpillar method"
+      },
+      "enabled": true,
+      "optional": false,
+      "anchor_note": "interview practice, no curriculum anchor"
+    },
+    {
+      "id": "prefix_sum",
+      "name": "Prefix Sum",
+      "area": "Array techniques",
+      "definition": "Precomputes cumulative sums or counts so range queries or subarray sums take constant time.",
+      "anchor": {
+        "ioi_2025": "not named in the parts read",
+        "codility": "Prefix Sums"
+      },
+      "enabled": true,
+      "optional": false,
+      "anchor_note": "interview practice, no curriculum anchor"
+    },
+    {
+      "id": "sorting",
+      "name": "Sorting",
+      "area": "Searching & sorting",
+      "definition": "Orders the data (built-in or hand-written) as the key step, or relies on sorted order for the rest of the logic.",
+      "anchor": {
+        "cs2023": "AL-Foundational: Sorting Algorithms",
+        "ioi_2025": "Quicksort, quickselect, heap sort, merge sort",
+        "codility": "Sorting"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "binary_search",
+      "name": "Binary Search",
+      "area": "Searching & sorting",
+      "definition": "Repeatedly halves a sorted or monotonic search space, including searching on the answer.",
+      "anchor": {
+        "cs2023": "AL-Foundational: Search Algorithms",
+        "ioi_2025": "Sequential and binary search",
+        "codility": "Binary search algorithm"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "graph_traversal",
+      "name": "Graph Traversal",
+      "area": "Graphs",
+      "definition": "Visits nodes of a graph or grid with DFS or BFS while tracking visited nodes: reachability, connected components, flood fill, unweighted shortest path.",
+      "anchor": {
+        "cs2023": "AL-Foundational: Graphs",
+        "ioi_2025": "DFS and BFS; connected components"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "advanced_graph",
+      "name": "Advanced Graph Algorithms",
+      "area": "Graphs",
+      "definition": "Weighted shortest paths, minimum spanning trees, topological ordering, union-find or flow.",
+      "anchor": {
+        "cs2023": "AL-Foundational: shortest path, minimal spanning trees; topological sort (KA Core). Union-Find is not named.",
+        "ioi_2025": "Shortest paths, MSTs, topological ordering, Union-Find, flow"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "brute_force",
+      "name": "Brute Force / Enumeration",
+      "area": "Strategies",
+      "definition": "Tries every candidate, pair or subset exhaustively, typically with nested loops or by generating all combinations.",
+      "anchor": {
+        "cs2023": "AL-Strategies: Brute-Force",
+        "ioi_2025": "Brute force"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "greedy",
+      "name": "Greedy",
+      "area": "Strategies",
+      "definition": "Makes the locally best choice at each step and never revisits it, often after sorting.",
+      "anchor": {
+        "cs2023": "AL-Strategies: Greedy",
+        "ioi_2025": "Greedy",
+        "codility": "Greedy algorithms"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "dynamic_programming",
+      "name": "Dynamic Programming",
+      "area": "Strategies",
+      "definition": "Solves overlapping subproblems by storing their results (a table or memoised recursion) and combining them.",
+      "anchor": {
+        "cs2023": "AL-Strategies: Transform-and-Conquer (includes Dynamic Programming)",
+        "ioi_2025": "Dynamic programming",
+        "codility": "Dynamic programming"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "recursion_dc",
+      "name": "Recursion & Divide and Conquer",
+      "area": "Strategies",
+      "definition": "Solves a problem by calling itself on smaller inputs, or by splitting it into independent parts and combining the results.",
+      "anchor": {
+        "cs2023": "AL-Strategies: Divide-and-Conquer; Iteration vs. Recursion",
+        "ioi_2025": "Divide-and-conquer"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "backtracking",
+      "name": "Backtracking",
+      "area": "Strategies",
+      "definition": "Builds a solution step by step, explores choices recursively, and undoes a choice when it leads nowhere: permutations, subsets, N-Queens.",
+      "anchor": {
+        "cs2023": "AL-Strategies: Handling Exponential Growth (backtracking, branch-and-bound)",
+        "ioi_2025": "Backtracking and branch-and-bound"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "math_number_theory",
+      "name": "Math & Number Theory",
+      "area": "Maths & bits",
+      "definition": "Relies on arithmetic properties: gcd, primes, modular arithmetic, combinatorics, closed-form formulas.",
+      "anchor": {
+        "cs2023": "MSF-Discrete (topics not re-read in the survey)",
+        "ioi_2025": "Primes, divisibility, modular arithmetic; Euclid, sieve, fast exponentiation",
+        "codility": "Prime and composite numbers; Sieve of Eratosthenes; Euclidean algorithm; Fibonacci numbers"
+      },
+      "enabled": true,
+      "optional": false
+    },
+    {
+      "id": "bit_manipulation",
+      "name": "Bit Manipulation",
+      "area": "Maths & bits",
+      "definition": "Uses bitwise operators (and, or, xor, shifts, masks) to encode state or compute the result.",
+      "anchor": {
+        "ioi_2025": "not found in the parts read; PF1 to PF5 not checked"
+      },
+      "enabled": true,
+      "optional": false,
+      "anchor_note": "interview practice, no curriculum anchor"
+    },
+    {
+      "id": "design",
+      "name": "Design",
+      "area": "Software design",
+      "definition": "Class or API design: objects, encapsulation, designing a data structure as a class (for example an LRU cache).",
+      "anchor": {
+        "cs2023": "FPL-OOP: Object-Oriented Programming"
+      },
+      "enabled": false,
+      "optional": true,
+      "note": "Optional 21st tag; disabled by default."
+    }
+  ]
+}
