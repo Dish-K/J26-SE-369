@@ -1,0 +1,6 @@
+# Local-only data for C3 (dataset, caches, results). Never commit.
+dev_assets/
+.cache/
+eval/results/
+*.jsonl
+*.jsonl.gz
