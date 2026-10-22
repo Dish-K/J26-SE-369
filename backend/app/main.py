@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException, Request, status
 
@@ -8,20 +9,25 @@ from backend.app.db.pool import (
     close_db_pool,
     create_db_pool,
 )
-from backend.app.telemetry.router import router as telemetry_router
-
 from backend.app.telemetry.clock_store import SessionLocks
+from backend.app.telemetry.router import router as telemetry_router
+from backend.app.telemetry.scheduler import run_scheduler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await create_db_pool()
     app.state.db_pool = pool
     app.state.telemetry_session_locks = SessionLocks()
+    live_features = asyncio.create_task(run_scheduler(pool, app.state.telemetry_session_locks))
 
     try:
         yield
     finally:
+        live_features.cancel()
+        with suppress(asyncio.CancelledError):
+            await live_features
         await close_db_pool(pool)
+
 
 app = FastAPI(title="CodeTrace", lifespan=lifespan)
 app.include_router(telemetry_router)

@@ -103,7 +103,7 @@ _NEW_SESSION = (
     "VALUES ($1, $2, 'python', now())"
 )
 # sessions last: the other tables point to it.
-_SESSION_TABLES = ("events", "ingested_batches", "clock_sync_samples", "tasks", "sessions")
+_SESSION_TABLES = ("events", "ingested_batches", "clock_sync_samples", "feature_vectors", "tasks", "sessions" )
 
 
 # Each test gets its own session row and removes its rows afterwards, even on failure.

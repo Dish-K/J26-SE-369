@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 from uuid import UUID
@@ -15,6 +16,7 @@ for _folder in Path(__file__).resolve().parents:
         break
 
 from shared_features import ExitStatus, Kind, KeyClass, Origin, PasteOrigin, SourcePane  # noqa: E402
+from backend.app.db.pool import close_db_pool, create_db_pool  # noqa: E402
 
 T0 = pd.Timestamp("2026-10-09T10:00:00Z")
 SESSION = UUID("11111111-1111-1111-1111-111111111111")
@@ -147,3 +149,31 @@ def window_at(frame: pd.DataFrame, start):
     rows = frame[frame["window_start"] == start]
     assert len(rows) == 1, f"expected one window at {start}, found {len(rows)}"
     return rows.iloc[0]
+
+
+# Skips rather than fails without a database, so C2 can still run tests/telemetry alone.
+@pytest.fixture(scope="session")
+def database():
+    async def connect():
+        await close_db_pool(await create_db_pool())
+
+    try:
+        asyncio.run(connect())
+    except (OSError, RuntimeError) as exc:
+        pytest.skip(f"database not available: {exc}")
+
+
+def on_connection(work):
+    async def run():
+        pool = await create_db_pool()
+        try:
+            async with pool.acquire() as connection:
+                return await work(connection)
+        finally:
+            await close_db_pool(pool)
+
+    return asyncio.run(run())
+
+
+def run_sql(statement, *args):
+    return on_connection(lambda connection: connection.fetch(statement, *args))
