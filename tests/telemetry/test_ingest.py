@@ -103,7 +103,7 @@ _NEW_SESSION = (
     "VALUES ($1, $2, 'python', now())"
 )
 # sessions last: the other tables point to it.
-_SESSION_TABLES = ("events", "ingested_batches", "clock_sync_samples", "feature_vectors", "tasks", "sessions" )
+_SESSION_TABLES = ("events", "ingested_batches", "clock_sync_samples", "feature_vectors", "task_submissions", "tasks", "sessions" )
 
 
 # Each test gets its own session row and removes its rows afterwards, even on failure.
@@ -428,3 +428,44 @@ def test_a_reload_starts_a_new_page_load_in_the_same_session(session):
         (0, HANDSHAKE_SAMPLES, HANDSHAKE_SAMPLES // 2),
         (1, HANDSHAKE_SAMPLES, HANDSHAKE_SAMPLES // 2),
     ]
+
+def _submit_message(task_id, code="print(1)", version_id=3):
+    return {"submit": {"task_id": str(task_id), "code_text": code, "version_id": version_id}}
+
+
+def test_submitting_stores_the_code_and_closes_the_task(started):
+    with TestClient(app) as client:
+        ids = _start(client, started)
+        with client.websocket_connect("/ws/telemetry") as websocket:
+            assert _handshake(websocket, ids["session_id"]) == 0
+            websocket.send_json(_submit_message(ids["task_id"]))
+            assert websocket.receive_json() == {"submitted": {"task_id": str(ids["task_id"])}}
+
+    submission = _sql("SELECT * FROM task_submissions WHERE task_id = $1", ids["task_id"])[0]
+    assert (submission["code_text"], submission["version_id"], submission["load_seq"]) == ("print(1)", 3, 0)
+    task = _sql("SELECT status, submitted_at FROM tasks WHERE task_id = $1", ids["task_id"])[0]
+    assert task["status"] == "submitted"
+    assert task["submitted_at"] == submission["submitted_at"]
+
+
+def test_a_resent_submit_gets_the_same_answer(started):
+    with TestClient(app) as client:
+        ids = _start(client, started)
+        with client.websocket_connect("/ws/telemetry") as websocket:
+            _handshake(websocket, ids["session_id"])
+            for _ in range(2):
+                websocket.send_json(_submit_message(ids["task_id"]))
+                assert websocket.receive_json() == {"submitted": {"task_id": str(ids["task_id"])}}
+
+    assert _sql("SELECT count(*) FROM task_submissions WHERE task_id = $1", ids["task_id"])[0][0] == 1
+
+
+def test_submitting_a_task_that_is_not_open_is_refused(started):
+    with TestClient(app) as client:
+        ids = _start(client, started)
+        with client.websocket_connect("/ws/telemetry") as websocket:
+            _handshake(websocket, ids["session_id"])
+            websocket.send_json(_submit_message(uuid4()))
+            with pytest.raises(WebSocketDisconnect) as closed:
+                websocket.receive_json()
+    assert closed.value.code == 1008
