@@ -6,13 +6,19 @@ import asyncpg
 import pandas as pd
 
 from backend.app.telemetry.clock_store import SessionLocks
-from backend.app.telemetry.features import GRACE, live_pass
+from backend.app.telemetry.features import GRACE, finish_task, live_pass
 from shared_features import WINDOW_STEP
 
 logger = logging.getLogger(__name__)
 
 _OPEN_TASKS = "SELECT task_id, session_id FROM tasks WHERE status = 'active'"
 
+_UNFINISHED_SUBMISSIONS = """ SELECT task_id FROM tasks
+  WHERE status = 'submitted'
+    AND NOT EXISTS (
+      SELECT 1 FROM feature_vectors
+      WHERE feature_vectors.task_id = tasks.task_id AND run_id = 'final'
+    )"""
 
 def seconds_to_next_tick(now: float) -> float:
     # A tick falls 2 s after every 10 s boundary, when the windows that just ended become due.
@@ -31,6 +37,12 @@ async def run_tick(connection: asyncpg.Connection, locks: SessionLocks, now: pd.
         except Exception:
             # One broken task must not stop the others from getting their windows.
             logger.exception("Live pass failed for task %s", task["task_id"])
+
+    for task in await connection.fetch(_UNFINISHED_SUBMISSIONS):
+        try:
+            stored += await finish_task(connection, task["task_id"])
+        except Exception:
+            logger.exception("Final pass failed for task %s", task["task_id"])
     return stored
 
 

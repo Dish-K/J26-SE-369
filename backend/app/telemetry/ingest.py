@@ -97,6 +97,13 @@ class ClockSamples(BaseModel):
 
     samples: list[ClockSample] = Field(min_length=HANDSHAKE_SAMPLES, max_length=HANDSHAKE_SAMPLES)
 
+class Submit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    code_text: str
+    version_id: int = Field(ge=1)
+
 
 # Read from Event, so the row values and the COPY column list cannot drift apart.
 CLIENT_COLUMNS = tuple(Event.model_fields)

@@ -108,3 +108,21 @@ async def final_pass(connection: asyncpg.Connection, task_id: UUID) -> int:
 
     frame = await asyncio.to_thread(extract_features, events, tasks, run_id="final")
     return await store_vectors(connection, frame)
+
+async def finish_task(connection: asyncpg.Connection, task_id: UUID) -> int:
+    events, tasks = await load_task(connection, task_id)
+    task = tasks.iloc[0]
+    if pd.isna(task["submitted_at"]):
+        raise ValueError(f"task {task_id} is not submitted")
+
+    stored = await connection.fetch(_STORED_WINDOWS, task["session_id"], task_id, "live")
+    grid = window_grid(pd.Timestamp(task["started_at"]), pd.Timestamp(task["submitted_at"]))
+    missing = grid.difference(pd.DatetimeIndex([row["window_start"] for row in stored], tz="UTC"))
+
+    written = 0
+    if not missing.empty:
+        frame = await asyncio.to_thread(
+            extract_features, events, tasks, run_id="live", window_starts=missing
+        )
+        written = await store_vectors(connection, frame)
+    return written + await final_pass(connection, task_id)

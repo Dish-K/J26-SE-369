@@ -6,15 +6,20 @@ from uuid import uuid4
 import pandas as pd
 import pytest
 
-from backend.app.telemetry.features import due_window_starts, final_pass, live_pass, load_task
+from backend.app.telemetry.clock_store import SessionLocks
+from backend.app.telemetry.features import (
+    due_window_starts,
+    final_pass,
+    finish_task,
+    live_pass,
+    load_task,
+)
 from backend.app.telemetry.ingest import Batch
 from backend.app.telemetry.router import store_batch
+from backend.app.telemetry.scheduler import run_tick, seconds_to_next_tick
 from shared_features import FEATURE_NAMES, extract_features
 
 from conftest import on_connection, run_sql
-
-from backend.app.telemetry.clock_store import SessionLocks
-from backend.app.telemetry.scheduler import run_tick, seconds_to_next_tick
 
 # The grid starts at floor(10:00:05) - 20 s = 09:59:40, and that window ends at 10:00:10.
 STARTED = pd.Timestamp("2026-10-22T10:00:05Z")
@@ -227,3 +232,30 @@ def test_a_tick_makes_windows_only_for_connected_sessions(task):
     locks.take(session, owner)
     tick()
     assert len(_vectors(session, "live")) == 6
+
+def test_finishing_a_submitted_task_fills_its_live_windows_and_writes_final(task):
+    session, task_id = task
+    _press(session, task_id, 0, 5)
+    _live(task_id, "10:01:02")
+    _submit(task_id, "10:01:30")
+
+    assert on_connection(lambda connection: finish_task(connection, task_id)) == 6 + 12
+
+    live, final = _vectors(session, "live"), _vectors(session, "final")
+    assert list(live) == list(final)
+    assert (list(final)[0], list(final)[-1]) == ("09:59:40", "10:01:30")
+
+
+def test_a_tick_finishes_a_submitted_task_once(task):
+    session, task_id = task
+    _press(session, task_id, 0, 5)
+    _submit(task_id, "10:00:30")
+
+    def tick():
+        return on_connection(lambda connection: run_tick(connection, SessionLocks(), _at("10:01:02")))
+
+    tick()
+    finals = len(_vectors(session, "final"))
+    assert finals > 0
+    tick()
+    assert len(_vectors(session, "final")) == finals
